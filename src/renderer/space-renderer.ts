@@ -1,0 +1,414 @@
+import * as THREE from "three/webgpu";
+
+import { useAppStore } from "../app/app-store";
+import type { FeatureFlags } from "../app/feature-flags";
+import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
+import {
+  distanceToSlider,
+  earthRenderRadiusForAltitude,
+  PHASE_ONE_MIN_DISTANCE_M,
+  renderUnitsPerMeterForAltitude,
+  scaleDomainForDistance,
+  sliderToDistance,
+} from "../camera/scale-domains";
+import { EARTH_MEAN_RADIUS_M } from "../coordinates/units";
+import { createRenderer } from "./renderer-factory";
+
+type SceneObjects = {
+  earth: THREE.Mesh;
+  atmosphereInside: THREE.Mesh;
+  atmosphereOutside: THREE.Mesh;
+  localCap: THREE.Mesh;
+  observerMarker: THREE.Mesh;
+  coordinateGrid: THREE.LineSegments;
+  keyLight: THREE.DirectionalLight;
+  fillLight: THREE.HemisphereLight;
+};
+
+const TELEMETRY_INTERVAL_MS = 200;
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const t = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function createCoordinateGrid(): THREE.LineSegments {
+  const points: number[] = [];
+  const segmentCount = 96;
+
+  const addSegment = (a: THREE.Vector3, b: THREE.Vector3) => {
+    points.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  };
+
+  for (let latitudeDeg = -60; latitudeDeg <= 60; latitudeDeg += 30) {
+    const latitude = THREE.MathUtils.degToRad(latitudeDeg);
+    for (let segment = 0; segment < segmentCount; segment += 1) {
+      const longitudeA = (segment / segmentCount) * Math.PI * 2;
+      const longitudeB = ((segment + 1) / segmentCount) * Math.PI * 2;
+      const radius = Math.cos(latitude);
+      addSegment(
+        new THREE.Vector3(
+          radius * Math.cos(longitudeA),
+          Math.sin(latitude),
+          radius * Math.sin(longitudeA),
+        ),
+        new THREE.Vector3(
+          radius * Math.cos(longitudeB),
+          Math.sin(latitude),
+          radius * Math.sin(longitudeB),
+        ),
+      );
+    }
+  }
+
+  for (let longitudeDeg = 0; longitudeDeg < 180; longitudeDeg += 30) {
+    const longitude = THREE.MathUtils.degToRad(longitudeDeg);
+    for (let segment = 0; segment < segmentCount; segment += 1) {
+      const angleA = (segment / segmentCount) * Math.PI * 2;
+      const angleB = ((segment + 1) / segmentCount) * Math.PI * 2;
+      addSegment(
+        new THREE.Vector3(
+          Math.sin(angleA) * Math.cos(longitude),
+          Math.cos(angleA),
+          Math.sin(angleA) * Math.sin(longitude),
+        ),
+        new THREE.Vector3(
+          Math.sin(angleB) * Math.cos(longitude),
+          Math.cos(angleB),
+          Math.sin(angleB) * Math.sin(longitude),
+        ),
+      );
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
+  const material = new THREE.LineBasicMaterial({
+    color: 0x8fd5d5,
+    transparent: true,
+    opacity: 0.14,
+    depthWrite: false,
+  });
+  return new THREE.LineSegments(geometry, material);
+}
+
+function createSceneObjects(scene: THREE.Scene): SceneObjects {
+  const earthMaterial = new THREE.MeshStandardMaterial({
+    color: 0x123d48,
+    roughness: 0.82,
+    metalness: 0.02,
+  });
+  const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), earthMaterial);
+
+  const insideMaterial = new THREE.MeshBasicMaterial({
+    color: 0x338a9c,
+    transparent: true,
+    opacity: 0.36,
+    side: THREE.BackSide,
+    depthWrite: false,
+  });
+  const atmosphereInside = new THREE.Mesh(new THREE.SphereGeometry(1.025, 96, 48), insideMaterial);
+  atmosphereInside.renderOrder = -2;
+
+  const outsideMaterial = new THREE.MeshBasicMaterial({
+    color: 0x56c6dc,
+    transparent: true,
+    opacity: 0.18,
+    side: THREE.FrontSide,
+    depthWrite: false,
+  });
+  const atmosphereOutside = new THREE.Mesh(
+    new THREE.SphereGeometry(1.025, 96, 48),
+    outsideMaterial,
+  );
+  atmosphereOutside.renderOrder = 2;
+
+  const capMaterial = new THREE.MeshStandardMaterial({
+    color: 0x0f3036,
+    roughness: 0.9,
+    transparent: true,
+    opacity: 1,
+    depthWrite: true,
+  });
+  const localCap = new THREE.Mesh(new THREE.CircleGeometry(1, 128), capMaterial);
+  localCap.rotation.x = -Math.PI / 2;
+
+  const observerMarker = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 32, 16),
+    new THREE.MeshBasicMaterial({ color: 0xf5c977 }),
+  );
+
+  const coordinateGrid = createCoordinateGrid();
+
+  const keyLight = new THREE.DirectionalLight(0xffeed2, 4.2);
+  const fillLight = new THREE.HemisphereLight(0x88c9db, 0x031014, 1.25);
+  scene.add(
+    atmosphereInside,
+    earth,
+    coordinateGrid,
+    observerMarker,
+    localCap,
+    atmosphereOutside,
+    keyLight,
+    keyLight.target,
+    fillLight,
+  );
+
+  return {
+    earth,
+    atmosphereInside,
+    atmosphereOutside,
+    localCap,
+    observerMarker,
+    coordinateGrid,
+    keyLight,
+    fillLight,
+  };
+}
+
+export class SpaceRenderer {
+  private readonly canvas: HTMLCanvasElement;
+  private readonly flags: FeatureFlags;
+  private renderer: THREE.WebGPURenderer | null = null;
+  private scene: THREE.Scene | null = null;
+  private camera: THREE.PerspectiveCamera | null = null;
+  private objects: SceneObjects | null = null;
+  private distanceSpring: SpringState = {
+    value: Math.log(PHASE_ONE_MIN_DISTANCE_M),
+    velocity: 0,
+  };
+  private yawOffset = 0;
+  private pitchOffset = 0;
+  private pointerId: number | null = null;
+  private lastPointer = { x: 0, y: 0 };
+  private previousFrameMs = 0;
+  private telemetryAtMs = 0;
+  private frameSamplesMs: number[] = [];
+  private readonly cleanupCallbacks: Array<() => void> = [];
+
+  constructor(canvas: HTMLCanvasElement, flags: FeatureFlags) {
+    this.canvas = canvas;
+    this.flags = flags;
+  }
+
+  async initialize(): Promise<void> {
+    const bundle = await createRenderer(this.canvas, this.flags.renderer, this.flags.depth);
+    this.renderer = bundle.renderer;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.12;
+
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x020711);
+    this.camera = new THREE.PerspectiveCamera(58, 1, 0.00001, 5000);
+    this.camera.position.set(0, 0, 0);
+    this.objects = createSceneObjects(this.scene);
+
+    this.bindInput();
+    this.resize();
+    const initialTelemetry = useAppStore.getState().telemetry;
+    useAppStore.getState().setTelemetry({
+      ...initialTelemetry,
+      backend: bundle.backend,
+    });
+    this.renderer.setAnimationLoop((timeMs) => this.renderFrame(timeMs));
+  }
+
+  dispose(): void {
+    this.renderer?.setAnimationLoop(null);
+    for (const cleanup of this.cleanupCallbacks) cleanup();
+    this.renderer?.dispose();
+  }
+
+  private bindInput(): void {
+    const onResize = () => this.resize();
+    const onPointerDown = (event: PointerEvent) => {
+      this.pointerId = event.pointerId;
+      this.lastPointer = { x: event.clientX, y: event.clientY };
+      this.canvas.setPointerCapture(event.pointerId);
+      this.canvas.classList.add("is-dragging");
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== this.pointerId) return;
+      const sensitivity = 0.004;
+      this.yawOffset -= (event.clientX - this.lastPointer.x) * sensitivity;
+      this.pitchOffset -= (event.clientY - this.lastPointer.y) * sensitivity;
+      this.pitchOffset = THREE.MathUtils.clamp(this.pitchOffset, -0.65, 0.65);
+      this.lastPointer = { x: event.clientX, y: event.clientY };
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerId !== this.pointerId) return;
+      this.pointerId = null;
+      this.canvas.classList.remove("is-dragging");
+    };
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const currentTarget = useAppStore.getState().targetDistanceM;
+      const currentT = distanceToSlider(currentTarget);
+      const nextT = THREE.MathUtils.clamp(currentT + event.deltaY * 0.0005, 0, 1);
+      useAppStore.getState().setTargetDistanceM(sliderToDistance(nextT));
+    };
+
+    window.addEventListener("resize", onResize);
+    this.canvas.addEventListener("pointerdown", onPointerDown);
+    this.canvas.addEventListener("pointermove", onPointerMove);
+    this.canvas.addEventListener("pointerup", onPointerUp);
+    this.canvas.addEventListener("pointercancel", onPointerUp);
+    this.canvas.addEventListener("wheel", onWheel, { passive: false });
+
+    this.cleanupCallbacks.push(
+      () => window.removeEventListener("resize", onResize),
+      () => this.canvas.removeEventListener("pointerdown", onPointerDown),
+      () => this.canvas.removeEventListener("pointermove", onPointerMove),
+      () => this.canvas.removeEventListener("pointerup", onPointerUp),
+      () => this.canvas.removeEventListener("pointercancel", onPointerUp),
+      () => this.canvas.removeEventListener("wheel", onWheel),
+    );
+  }
+
+  private resize(): void {
+    if (!this.renderer || !this.camera) return;
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    const mobile = width < 760;
+    const qualityCap =
+      this.flags.quality === "low" ? 1 : mobile ? 1.5 : this.flags.quality === "high" ? 2 : 1.75;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, qualityCap));
+    this.renderer.setSize(width, height, false);
+    this.camera.aspect = width / Math.max(1, height);
+    this.camera.updateProjectionMatrix();
+  }
+
+  private renderFrame(timeMs: number): void {
+    if (!this.renderer || !this.scene || !this.camera || !this.objects) return;
+
+    const rawDeltaSeconds = this.previousFrameMs ? (timeMs - this.previousFrameMs) / 1000 : 1 / 60;
+    this.previousFrameMs = timeMs;
+    const deltaSeconds = Math.min(0.05, rawDeltaSeconds);
+    const appState = useAppStore.getState();
+    const targetLogMeters = Math.log(appState.targetDistanceM);
+    const springFrequency = appState.reducedMotion ? 3.2 : 1.9;
+    this.distanceSpring = stepCriticalSpring(
+      this.distanceSpring,
+      targetLogMeters,
+      deltaSeconds,
+      springFrequency,
+    );
+    const altitudeM = Math.exp(this.distanceSpring.value);
+    const normalizedScale = distanceToSlider(altitudeM);
+    const earthRadiusRender = earthRenderRadiusForAltitude(altitudeM);
+    const renderUnitsPerMeter = renderUnitsPerMeterForAltitude(altitudeM);
+    const earthCenterY = -(EARTH_MEAN_RADIUS_M + altitudeM) * renderUnitsPerMeter;
+
+    const globalObjects: THREE.Object3D[] = [
+      this.objects.earth,
+      this.objects.atmosphereInside,
+      this.objects.atmosphereOutside,
+      this.objects.coordinateGrid,
+    ];
+    for (const object of globalObjects) {
+      object.position.set(0, earthCenterY, 0);
+      object.scale.setScalar(earthRadiusRender);
+    }
+
+    const localFade = 1 - smoothstep(8_000, 90_000, altitudeM);
+    const capRadiusM = Math.max(220_000, Math.sqrt(2 * EARTH_MEAN_RADIUS_M * altitudeM) * 1.5);
+    this.objects.localCap.position.set(0, -altitudeM * renderUnitsPerMeter, 0);
+    this.objects.localCap.scale.setScalar(capRadiusM * renderUnitsPerMeter);
+    this.objects.localCap.visible = localFade > 0.001;
+    (this.objects.localCap.material as THREE.MeshStandardMaterial).opacity = localFade;
+
+    const markerReveal = smoothstep(20_000, 800_000, altitudeM);
+    const markerSize = Math.max(0.004, earthRadiusRender * 0.009);
+    this.objects.observerMarker.position.set(0, -altitudeM * renderUnitsPerMeter, 0);
+    this.objects.observerMarker.scale.setScalar(markerSize);
+    this.objects.observerMarker.visible = markerReveal > 0.001;
+    const markerMaterial = this.objects.observerMarker.material as THREE.MeshBasicMaterial;
+    markerMaterial.transparent = true;
+    markerMaterial.opacity = markerReveal;
+
+    const atmosphereExit = smoothstep(45_000, 450_000, altitudeM);
+    (this.objects.atmosphereInside.material as THREE.MeshBasicMaterial).opacity =
+      0.36 * (1 - atmosphereExit);
+    (this.objects.atmosphereOutside.material as THREE.MeshBasicMaterial).opacity =
+      0.09 + 0.2 * atmosphereExit;
+    this.objects.coordinateGrid.visible = normalizedScale > 0.67;
+
+    this.objects.keyLight.position.set(
+      earthRadiusRender * 3,
+      earthCenterY + earthRadiusRender * 2,
+      earthRadiusRender * 2,
+    );
+    this.objects.keyLight.target.position.set(0, earthCenterY, 0);
+
+    const composition = smoothstep(0.32, 0.94, normalizedScale);
+    const baseQuaternion = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0),
+      (-Math.PI / 2) * composition,
+    );
+    const userQuaternion = new THREE.Quaternion()
+      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yawOffset)
+      .multiply(
+        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pitchOffset),
+      );
+    this.camera.quaternion.copy(baseQuaternion).multiply(userQuaternion);
+    this.camera.fov = THREE.MathUtils.lerp(58, 46, composition);
+    this.camera.updateProjectionMatrix();
+
+    const skyBrightness = 1 - smoothstep(100_000, 900_000, altitudeM);
+    const sceneBackground = this.scene.background;
+    if (sceneBackground instanceof THREE.Color) {
+      sceneBackground.setRGB(
+        0.008 + 0.014 * skyBrightness,
+        0.021 + 0.07 * skyBrightness,
+        0.055 + 0.11 * skyBrightness,
+        THREE.SRGBColorSpace,
+      );
+    }
+
+    this.renderer.render(this.scene, this.camera);
+    this.collectTelemetry(
+      timeMs,
+      rawDeltaSeconds * 1000,
+      altitudeM,
+      renderUnitsPerMeter,
+      capRadiusM,
+    );
+  }
+
+  private collectTelemetry(
+    timeMs: number,
+    frameMs: number,
+    altitudeM: number,
+    renderUnitsPerMeter: number,
+    capRadiusM: number,
+  ): void {
+    if (!this.renderer) return;
+    if (frameMs < 100) this.frameSamplesMs.push(frameMs);
+    if (this.frameSamplesMs.length > 180) this.frameSamplesMs.shift();
+    if (timeMs - this.telemetryAtMs < TELEMETRY_INTERVAL_MS) return;
+    this.telemetryAtMs = timeMs;
+
+    const total = this.frameSamplesMs.reduce((sum, sample) => sum + sample, 0);
+    const averageFrameMs = this.frameSamplesMs.length ? total / this.frameSamplesMs.length : 0;
+    const localRepresentationActive = altitudeM < 90_000;
+    const largestLocalRenderMagnitude = localRepresentationActive
+      ? capRadiusM * renderUnitsPerMeter
+      : earthRenderRadiusForAltitude(altitudeM);
+    const estimatedJitterM = (largestLocalRenderMagnitude * 2 ** -23) / renderUnitsPerMeter;
+
+    useAppStore.getState().setTelemetry({
+      ...useAppStore.getState().telemetry,
+      currentDistanceM: altitudeM,
+      scaleDomain: scaleDomainForDistance(altitudeM),
+      fps: averageFrameMs ? 1000 / averageFrameMs : 0,
+      averageFrameMs,
+      worstFrameMs: this.frameSamplesMs.length ? Math.max(...this.frameSamplesMs) : 0,
+      drawCalls: this.renderer.info.render.calls,
+      geometries: this.renderer.info.memory.geometries,
+      textures: this.renderer.info.memory.textures,
+      renderScale: renderUnitsPerMeter,
+      estimatedJitterM,
+    });
+  }
+}
