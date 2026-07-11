@@ -5,3 +5,4 @@ playwright-report
 .playwright-cli
 pnpm-lock.yaml
 SPEC.md
+src/scene/sky/star-catalog.ts

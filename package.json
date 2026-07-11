@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "latest",
+    "astronomy-engine": "^2.1.19",
     "react": "latest",
     "react-dom": "latest",
     "tailwindcss": "latest",
