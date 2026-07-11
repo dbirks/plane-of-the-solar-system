@@ -10,7 +10,9 @@ test("opens at ground scale without a permission prompt", async ({ page }) => {
     "aria-valuetext",
     "Altitude · 2 m",
   );
-  await expect(page.getByText("WebGL 2", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Renderer debug information" }).getByText("WebGL 2"),
+  ).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
@@ -36,6 +38,9 @@ test("wheel changes scale and help exposes reduced motion", async ({ page }) => 
 test("canvas supports drag navigation", async ({ page }) => {
   await page.goto(fixedScenario);
   const canvas = page.locator("canvas");
+  await expect(
+    page.getByRole("complementary", { name: "Renderer debug information" }).getByText("WebGL 2"),
+  ).toBeVisible();
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
   if (!box) return;

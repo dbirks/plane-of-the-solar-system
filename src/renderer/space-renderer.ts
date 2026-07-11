@@ -98,7 +98,7 @@ function createSceneObjects(scene: THREE.Scene): SceneObjects {
     roughness: 0.82,
     metalness: 0.02,
   });
-  const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), earthMaterial);
+  const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 256, 128), earthMaterial);
 
   const insideMaterial = new THREE.MeshBasicMaterial({
     color: 0x338a9c,
@@ -107,7 +107,7 @@ function createSceneObjects(scene: THREE.Scene): SceneObjects {
     side: THREE.BackSide,
     depthWrite: false,
   });
-  const atmosphereInside = new THREE.Mesh(new THREE.SphereGeometry(1.025, 96, 48), insideMaterial);
+  const atmosphereInside = new THREE.Mesh(new THREE.SphereGeometry(1.025, 192, 96), insideMaterial);
   atmosphereInside.renderOrder = -2;
 
   const outsideMaterial = new THREE.MeshBasicMaterial({
@@ -118,7 +118,7 @@ function createSceneObjects(scene: THREE.Scene): SceneObjects {
     depthWrite: false,
   });
   const atmosphereOutside = new THREE.Mesh(
-    new THREE.SphereGeometry(1.025, 96, 48),
+    new THREE.SphereGeometry(1.025, 192, 96),
     outsideMaterial,
   );
   atmosphereOutside.renderOrder = 2;
@@ -140,8 +140,8 @@ function createSceneObjects(scene: THREE.Scene): SceneObjects {
 
   const coordinateGrid = createCoordinateGrid();
 
-  const keyLight = new THREE.DirectionalLight(0xffeed2, 4.2);
-  const fillLight = new THREE.HemisphereLight(0x88c9db, 0x031014, 1.25);
+  const keyLight = new THREE.DirectionalLight(0xffeed2, 2.6);
+  const fillLight = new THREE.HemisphereLight(0x88c9db, 0x031014, 0.85);
   scene.add(
     atmosphereInside,
     earth,
@@ -184,6 +184,8 @@ export class SpaceRenderer {
   private previousFrameMs = 0;
   private telemetryAtMs = 0;
   private frameSamplesMs: number[] = [];
+  private infoCallsAtLastSample = 0;
+  private framesSinceTelemetry = 0;
   private readonly cleanupCallbacks: Array<() => void> = [];
 
   constructor(canvas: HTMLCanvasElement, flags: FeatureFlags) {
@@ -196,7 +198,7 @@ export class SpaceRenderer {
     this.renderer = bundle.renderer;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMappingExposure = 0.92;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x020711);
@@ -319,7 +321,8 @@ export class SpaceRenderer {
     (this.objects.localCap.material as THREE.MeshStandardMaterial).opacity = localFade;
 
     const markerReveal = smoothstep(20_000, 800_000, altitudeM);
-    const markerSize = Math.max(0.004, earthRadiusRender * 0.009);
+    const markerDistanceRender = altitudeM * renderUnitsPerMeter;
+    const markerSize = Math.max(0.002, markerDistanceRender * 0.006);
     this.objects.observerMarker.position.set(0, -altitudeM * renderUnitsPerMeter, 0);
     this.objects.observerMarker.scale.setScalar(markerSize);
     this.objects.observerMarker.visible = markerReveal > 0.001;
@@ -329,10 +332,10 @@ export class SpaceRenderer {
 
     const atmosphereExit = smoothstep(45_000, 450_000, altitudeM);
     (this.objects.atmosphereInside.material as THREE.MeshBasicMaterial).opacity =
-      0.36 * (1 - atmosphereExit);
-    (this.objects.atmosphereOutside.material as THREE.MeshBasicMaterial).opacity =
-      0.09 + 0.2 * atmosphereExit;
-    this.objects.coordinateGrid.visible = normalizedScale > 0.67;
+      THREE.MathUtils.lerp(0.36, 0.15, atmosphereExit);
+    this.objects.atmosphereInside.visible = true;
+    this.objects.atmosphereOutside.visible = false;
+    this.objects.coordinateGrid.visible = false;
 
     this.objects.keyLight.position.set(
       earthRadiusRender * 3,
@@ -341,7 +344,7 @@ export class SpaceRenderer {
     );
     this.objects.keyLight.target.position.set(0, earthCenterY, 0);
 
-    const composition = smoothstep(0.32, 0.94, normalizedScale);
+    const composition = smoothstep(0.6, 0.99, normalizedScale);
     const baseQuaternion = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(1, 0, 0),
       (-Math.PI / 2) * composition,
@@ -367,6 +370,7 @@ export class SpaceRenderer {
     }
 
     this.renderer.render(this.scene, this.camera);
+    this.framesSinceTelemetry += 1;
     this.collectTelemetry(
       timeMs,
       rawDeltaSeconds * 1000,
@@ -396,6 +400,11 @@ export class SpaceRenderer {
       ? capRadiusM * renderUnitsPerMeter
       : earthRenderRadiusForAltitude(altitudeM);
     const estimatedJitterM = (largestLocalRenderMagnitude * 2 ** -23) / renderUnitsPerMeter;
+    const totalDrawCalls = this.renderer.info.render.calls;
+    const callsSinceLastSample = Math.max(0, totalDrawCalls - this.infoCallsAtLastSample);
+    const drawCalls = Math.round(callsSinceLastSample / Math.max(1, this.framesSinceTelemetry));
+    this.infoCallsAtLastSample = totalDrawCalls;
+    this.framesSinceTelemetry = 0;
 
     useAppStore.getState().setTelemetry({
       ...useAppStore.getState().telemetry,
@@ -404,7 +413,7 @@ export class SpaceRenderer {
       fps: averageFrameMs ? 1000 / averageFrameMs : 0,
       averageFrameMs,
       worstFrameMs: this.frameSamplesMs.length ? Math.max(...this.frameSamplesMs) : 0,
-      drawCalls: this.renderer.info.render.calls,
+      drawCalls,
       geometries: this.renderer.info.memory.geometries,
       textures: this.renderer.info.memory.textures,
       renderScale: renderUnitsPerMeter,

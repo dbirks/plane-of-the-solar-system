@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:pages": "tsc -b && vite build --base=/plane-of-the-solar-system/",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "oxlint --deny-warnings .",
-    "format:check": "oxfmt --check .",
-    "format": "oxfmt .",
+    "format:check": "oxfmt --ignore-path=.oxfmtignore --check .",
+    "format": "oxfmt --ignore-path=.oxfmtignore .",
     "typecheck": "tsc -b",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },

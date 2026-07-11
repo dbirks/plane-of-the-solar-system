@@ -13,10 +13,12 @@ Keep canonical camera altitude and Earth radius as double-precision meters. Keep
 
 The logical journey is logarithmic in meters and is integrated using a stable damped spring. Camera orientation is quaternion-derived from a scale-dependent guided composition plus user drag offsets. Reversed depth is the default experiment, with `standard` and `log` query overrides.
 
+The observer marker uses distance-relative render sizing so it remains discoverable without becoming a false physical body during ascent. Debug draw calls are derived as a per-frame delta from the renderer's cumulative counter. Coordinate guides remain hidden in Phase 1 because the initial WebGPU/WebGL line rendering obscured the Earth silhouette and they are not a Phase 1 deliverable. A single back-face atmosphere shell serves both inside and outside views; two overlapping transparent shells caused visible triangle-sorting bands in the WebGL fallback.
+
 ## Consequences
 
 Canonical truth never enters Three.js data structures, GPU coordinates stay well-conditioned, and the global Earth can retain true proportions. A local cap is a second render representation and must share visual parameters with the sphere to avoid a visible seam.
 
 ## Verification
 
-Numeric tests cover the logarithmic mapping and spring stability. Fixed-browser scenarios capture the near surface, transition, and whole-Earth views while debug telemetry records clipping and estimated jitter.
+Numeric tests cover the logarithmic mapping and spring stability. Fixed-browser scenarios capture the near surface, transition, and whole-Earth views while debug telemetry records clipping and estimated jitter. CLI captures at the atmosphere and low-orbit landmarks verify the distance-relative marker does not occlude the surface.
