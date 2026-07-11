@@ -36,6 +36,7 @@ test("wheel changes scale and help exposes reduced motion", async ({ page }) => 
 });
 
 test("canvas supports drag navigation", async ({ page }) => {
+  test.setTimeout(75_000);
   await page.goto(fixedScenario);
   const canvas = page.locator("canvas");
   await expect(
@@ -52,4 +53,15 @@ test("canvas supports drag navigation", async ({ page }) => {
   await expect(canvas).toHaveClass(/is-dragging/);
   await page.mouse.up();
   await expect(canvas).not.toHaveClass(/is-dragging/);
+
+  await page.getByRole("slider", { name: "Distance from the ground" }).fill("1");
+  const orientationOffset = page
+    .getByText("Orientation offset", { exact: true })
+    .locator("..")
+    .locator("dd");
+  await expect
+    .poll(async () => Number.parseFloat((await orientationOffset.textContent()) ?? "Infinity"), {
+      timeout: 8_000,
+    })
+    .toBeLessThan(0.1);
 });

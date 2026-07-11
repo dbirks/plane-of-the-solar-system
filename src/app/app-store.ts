@@ -14,6 +14,7 @@ export type RendererTelemetry = {
   textures: number;
   renderScale: number;
   estimatedJitterM: number;
+  orientationOffsetDeg: number;
 };
 
 type AppState = {
@@ -37,6 +38,7 @@ export const INITIAL_TELEMETRY: RendererTelemetry = {
   textures: 0,
   renderScale: 0,
   estimatedJitterM: 0,
+  orientationOffsetDeg: 0,
 };
 
 export const useAppStore = create<AppState>((set) => ({

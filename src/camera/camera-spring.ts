@@ -9,7 +9,7 @@ export function stepCriticalSpring(
   deltaSeconds: number,
   frequencyHz = 1.9,
 ): SpringState {
-  const dt = Math.min(0.05, Math.max(0, deltaSeconds));
+  const dt = Math.min(0.25, Math.max(0, deltaSeconds));
   const angularFrequency = 2 * Math.PI * frequencyHz;
   const displacement = state.value - target;
   const intermediate = state.velocity + angularFrequency * displacement;

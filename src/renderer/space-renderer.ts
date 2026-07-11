@@ -4,6 +4,10 @@ import { useAppStore } from "../app/app-store";
 import type { FeatureFlags } from "../app/feature-flags";
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
 import {
+  journeyCompositionForSlider,
+  wholeEarthFovDegForAspect,
+} from "../camera/camera-compositions";
+import {
   distanceToSlider,
   earthRenderRadiusForAltitude,
   PHASE_ONE_MIN_DISTANCE_M,
@@ -12,6 +16,7 @@ import {
   sliderToDistance,
 } from "../camera/scale-domains";
 import { EARTH_MEAN_RADIUS_M } from "../coordinates/units";
+import { createContinentOutlines } from "../scene/earth/continent-outlines";
 import { createRenderer } from "./renderer-factory";
 
 type SceneObjects = {
@@ -21,6 +26,7 @@ type SceneObjects = {
   localCap: THREE.Mesh;
   observerMarker: THREE.Mesh;
   coordinateGrid: THREE.LineSegments;
+  continentOutlines: THREE.LineSegments;
   keyLight: THREE.DirectionalLight;
   fillLight: THREE.HemisphereLight;
 };
@@ -92,7 +98,11 @@ function createCoordinateGrid(): THREE.LineSegments {
   return new THREE.LineSegments(geometry, material);
 }
 
-function createSceneObjects(scene: THREE.Scene): SceneObjects {
+function createSceneObjects(
+  scene: THREE.Scene,
+  observerLatitudeDeg: number,
+  observerLongitudeDeg: number,
+): SceneObjects {
   const earthMaterial = new THREE.MeshStandardMaterial({
     color: 0x123d48,
     roughness: 0.82,
@@ -139,6 +149,7 @@ function createSceneObjects(scene: THREE.Scene): SceneObjects {
   );
 
   const coordinateGrid = createCoordinateGrid();
+  const continentOutlines = createContinentOutlines(observerLatitudeDeg, observerLongitudeDeg);
 
   const keyLight = new THREE.DirectionalLight(0xffeed2, 2.6);
   const fillLight = new THREE.HemisphereLight(0x88c9db, 0x031014, 0.85);
@@ -146,6 +157,7 @@ function createSceneObjects(scene: THREE.Scene): SceneObjects {
     atmosphereInside,
     earth,
     coordinateGrid,
+    continentOutlines,
     observerMarker,
     localCap,
     atmosphereOutside,
@@ -161,6 +173,7 @@ function createSceneObjects(scene: THREE.Scene): SceneObjects {
     localCap,
     observerMarker,
     coordinateGrid,
+    continentOutlines,
     keyLight,
     fillLight,
   };
@@ -179,6 +192,8 @@ export class SpaceRenderer {
   };
   private yawOffset = 0;
   private pitchOffset = 0;
+  private guidanceRequested = false;
+  private previousTargetLogMeters = Math.log(PHASE_ONE_MIN_DISTANCE_M);
   private pointerId: number | null = null;
   private lastPointer = { x: 0, y: 0 };
   private previousFrameMs = 0;
@@ -204,7 +219,7 @@ export class SpaceRenderer {
     this.scene.background = new THREE.Color(0x020711);
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.00001, 5000);
     this.camera.position.set(0, 0, 0);
-    this.objects = createSceneObjects(this.scene);
+    this.objects = createSceneObjects(this.scene, this.flags.latitudeDeg, this.flags.longitudeDeg);
 
     this.bindInput();
     this.resize();
@@ -226,6 +241,7 @@ export class SpaceRenderer {
     const onResize = () => this.resize();
     const onPointerDown = (event: PointerEvent) => {
       this.pointerId = event.pointerId;
+      this.guidanceRequested = false;
       this.lastPointer = { x: event.clientX, y: event.clientY };
       this.canvas.setPointerCapture(event.pointerId);
       this.canvas.classList.add("is-dragging");
@@ -289,6 +305,21 @@ export class SpaceRenderer {
     const deltaSeconds = Math.min(0.05, rawDeltaSeconds);
     const appState = useAppStore.getState();
     const targetLogMeters = Math.log(appState.targetDistanceM);
+    if (Math.abs(targetLogMeters - this.previousTargetLogMeters) > 0.0001) {
+      this.guidanceRequested = true;
+      this.previousTargetLogMeters = targetLogMeters;
+    }
+    if (this.pointerId === null && this.guidanceRequested) {
+      const recenterDeltaSeconds = Math.min(0.25, Math.max(0, rawDeltaSeconds));
+      const recenter = Math.exp(-3.2 * recenterDeltaSeconds);
+      this.yawOffset *= recenter;
+      this.pitchOffset *= recenter;
+      if (Math.abs(this.yawOffset) < 0.0001 && Math.abs(this.pitchOffset) < 0.0001) {
+        this.yawOffset = 0;
+        this.pitchOffset = 0;
+        this.guidanceRequested = false;
+      }
+    }
     const springFrequency = appState.reducedMotion ? 3.2 : 1.9;
     this.distanceSpring = stepCriticalSpring(
       this.distanceSpring,
@@ -307,6 +338,7 @@ export class SpaceRenderer {
       this.objects.atmosphereInside,
       this.objects.atmosphereOutside,
       this.objects.coordinateGrid,
+      this.objects.continentOutlines,
     ];
     for (const object of globalObjects) {
       object.position.set(0, earthCenterY, 0);
@@ -336,6 +368,10 @@ export class SpaceRenderer {
     this.objects.atmosphereInside.visible = true;
     this.objects.atmosphereOutside.visible = false;
     this.objects.coordinateGrid.visible = false;
+    const continentReveal = smoothstep(0.3, 0.82, normalizedScale);
+    this.objects.continentOutlines.visible = continentReveal > 0.001;
+    (this.objects.continentOutlines.material as THREE.LineBasicMaterial).opacity =
+      0.04 + continentReveal * 0.28;
 
     this.objects.keyLight.position.set(
       earthRadiusRender * 3,
@@ -344,7 +380,7 @@ export class SpaceRenderer {
     );
     this.objects.keyLight.target.position.set(0, earthCenterY, 0);
 
-    const composition = smoothstep(0.6, 0.99, normalizedScale);
+    const composition = journeyCompositionForSlider(normalizedScale);
     const baseQuaternion = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(1, 0, 0),
       (-Math.PI / 2) * composition,
@@ -355,10 +391,14 @@ export class SpaceRenderer {
         new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pitchOffset),
       );
     this.camera.quaternion.copy(baseQuaternion).multiply(userQuaternion);
-    this.camera.fov = THREE.MathUtils.lerp(58, 46, composition);
+    this.camera.fov = THREE.MathUtils.lerp(
+      58,
+      wholeEarthFovDegForAspect(this.camera.aspect),
+      composition,
+    );
     this.camera.updateProjectionMatrix();
 
-    const skyBrightness = 1 - smoothstep(100_000, 900_000, altitudeM);
+    const skyBrightness = 1 - smoothstep(1_000, 180_000, altitudeM);
     const sceneBackground = this.scene.background;
     if (sceneBackground instanceof THREE.Color) {
       sceneBackground.setRGB(
@@ -418,6 +458,7 @@ export class SpaceRenderer {
       textures: this.renderer.info.memory.textures,
       renderScale: renderUnitsPerMeter,
       estimatedJitterM,
+      orientationOffsetDeg: THREE.MathUtils.radToDeg(Math.hypot(this.yawOffset, this.pitchOffset)),
     });
   }
 }

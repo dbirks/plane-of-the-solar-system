@@ -54,7 +54,7 @@ export function ScaleSlider() {
             <span
               className="landmark-notch"
               key={landmark.id}
-              style={{ bottom: `${distanceToSlider(landmark.distanceM) * 100}%` }}
+              style={{ bottom: `${landmark.sliderT * 100}%` }}
             />
           ))}
         </div>
@@ -63,7 +63,7 @@ export function ScaleSlider() {
             <button
               key={landmark.id}
               type="button"
-              style={{ bottom: `${distanceToSlider(landmark.distanceM) * 100}%` }}
+              style={{ bottom: `${landmark.sliderT * 100}%` }}
               onClick={() => setTargetDistanceM(landmark.distanceM)}
             >
               {landmark.label}

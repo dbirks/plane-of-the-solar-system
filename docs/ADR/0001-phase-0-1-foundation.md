@@ -13,6 +13,8 @@ Use the selected stack directly. React owns the interface and Zustand state. A l
 
 Pin the resolved Three.js version in `pnpm-lock.yaml`. Import the WebGPU build from `three/webgpu`, use only renderer-compatible built-in/node materials, and expose `renderer=webgl`.
 
+Run browser scenarios through one Playwright worker. Multiple simultaneous WebGPU-renderer instances and screenshot readbacks contend for the same headless GPU process and made otherwise passing drag/capture scenarios exceed their time budgets; serial projects keep this GPU-bound acceptance suite deterministic.
+
 ## Consequences
 
 The UI can update independently of render cadence, WebGPU is preferred where supported, and the same code path remains testable on WebGL 2. The WebGPU renderer is still evolving, so its backend and depth behavior must be verified after upgrades.

@@ -20,6 +20,7 @@ export function DebugPanel({ flags }: { flags: FeatureFlags }) {
     ["Draw calls", String(telemetry.drawCalls)],
     ["GPU resources", `${telemetry.geometries} geom · ${telemetry.textures} tex`],
     ["Quantization est.", `${telemetry.estimatedJitterM.toFixed(3)} m`],
+    ["Orientation offset", `${telemetry.orientationOffsetDeg.toFixed(3)}°`],
   ];
 
   return (

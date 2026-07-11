@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { stepCriticalSpring } from "../camera/camera-spring";
+import {
+  journeyCompositionForSlider,
+  wholeEarthFovDegForAspect,
+} from "../camera/camera-compositions";
 import { formatDistance } from "../camera/distance-format";
 import {
   applySoftLandmarkAttraction,
@@ -21,6 +25,13 @@ describe("logarithmic journey scale", () => {
     }
   });
 
+  it("uses perceptual logarithmic anchors for a responsive ascent", () => {
+    expect(distanceToSlider(1_000)).toBeCloseTo(0.16, 12);
+    expect(distanceToSlider(100_000)).toBeCloseTo(0.38, 12);
+    expect(distanceToSlider(500_000)).toBeCloseTo(0.58, 12);
+    expect(sliderToDistance(0.27)).toBeCloseTo(10_000, 6);
+  });
+
   it("gently attracts near a landmark without trapping distant values", () => {
     const atmosphereT = distanceToSlider(
       PHASE_ONE_LANDMARKS.find((item) => item.id === "atmosphere")!.distanceM,
@@ -37,7 +48,7 @@ describe("camera spring", () => {
   it("converges without overshoot at uneven frame intervals", () => {
     let state = { value: Math.log(2), velocity: 0 };
     const target = Math.log(20_000_000);
-    const intervals = [1 / 60, 1 / 30, 1 / 120, 0.05];
+    const intervals = [1 / 60, 1 / 30, 1 / 120, 0.05, 0.2];
     let previous = state.value;
     for (let index = 0; index < 300; index += 1) {
       state = stepCriticalSpring(state, target, intervals[index % intervals.length]!);
@@ -46,6 +57,21 @@ describe("camera spring", () => {
       previous = state.value;
     }
     expect(state.value).toBeCloseTo(target, 8);
+  });
+});
+
+describe("whole-Earth composition", () => {
+  it("widens the vertical FOV in portrait to preserve horizontal framing", () => {
+    expect(wholeEarthFovDegForAspect(16 / 9)).toBe(46);
+    expect(wholeEarthFovDegForAspect(390 / 844)).toBeGreaterThan(68);
+    expect(wholeEarthFovDegForAspect(390 / 844)).toBeLessThanOrEqual(76);
+  });
+
+  it("keeps black space visible at the low-orbit landmark", () => {
+    expect(journeyCompositionForSlider(0)).toBe(0);
+    expect(journeyCompositionForSlider(0.38)).toBeCloseTo(0.17, 12);
+    expect(journeyCompositionForSlider(0.58)).toBeCloseTo(0.34, 12);
+    expect(journeyCompositionForSlider(1)).toBe(1);
   });
 });
 

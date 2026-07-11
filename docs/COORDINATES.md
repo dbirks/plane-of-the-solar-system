@@ -14,5 +14,6 @@ Mappings required by the spec:
 
 - Ecliptic to Three: `[x, y, z] -> [x, z, -y]`
 - Horizontal to local Three: `[north, west, up] -> [-west, up, -north]`
+- Earth-fixed to Three Y-up: `[x, y, z] -> [x, z, -y]`
 
 Physical state uses JavaScript double-precision numbers and meters. Three.js vectors are temporary rendering values only.
