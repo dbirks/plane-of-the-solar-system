@@ -19,6 +19,21 @@ describe("debug feature flags", () => {
     expect(new Date(flags.initialUtcMs).toISOString()).toBe("2024-01-02T03:04:05.000Z");
   });
 
+  it("falls back to the Indianapolis observer when lat/lon are absent or blank", () => {
+    expect(readFeatureFlags("?debug=1")).toMatchObject({
+      latitudeDeg: 39.7684,
+      longitudeDeg: -86.1581,
+    });
+    expect(readFeatureFlags("?lat=&lon=")).toMatchObject({
+      latitudeDeg: 39.7684,
+      longitudeDeg: -86.1581,
+    });
+    expect(readFeatureFlags("?lat=abc&lon=xyz")).toMatchObject({
+      latitudeDeg: 39.7684,
+      longitudeDeg: -86.1581,
+    });
+  });
+
   it("defaults to the live current time when no ?time= is given", () => {
     const before = Date.now();
     const flags = readFeatureFlags("?debug=1");

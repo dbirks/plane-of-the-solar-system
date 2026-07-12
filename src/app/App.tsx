@@ -11,16 +11,18 @@ const flags = readFeatureFlags();
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const [rendererError, setRendererError] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const reducedMotion = useAppStore((state) => state.reducedMotion);
   const setReducedMotion = useAppStore((state) => state.setReducedMotion);
   const telemetry = useAppStore((state) => state.telemetry);
+  const openingTargetLabel = useAppStore((state) => state.openingTargetLabel);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const spaceRenderer = new SpaceRenderer(canvas, flags);
+    const spaceRenderer = new SpaceRenderer(canvas, flags, overlayRef.current);
     void spaceRenderer.initialize().catch((error: unknown) => {
       setRendererError(error instanceof Error ? error.message : "Renderer unavailable");
     });
@@ -31,6 +33,11 @@ export function App() {
     <main className="experience-shell">
       <canvas ref={canvasRef} className="space-canvas" aria-label="View from Earth" />
       <div className="sky-glow" aria-hidden="true" />
+      <div
+        ref={overlayRef}
+        className="sky-overlay"
+        data-opening-target={openingTargetLabel ?? ""}
+      />
       <header className="app-header">
         <div>
           <span className="brand-kicker">A change of scale</span>
@@ -46,7 +53,11 @@ export function App() {
 
       <div className="observer-label">
         <span className="pulse-dot" />
-        Fixed observer · Indianapolis
+        {openingTargetLabel === null
+          ? "Indianapolis"
+          : openingTargetLabel === "South"
+            ? "Facing south · Indianapolis"
+            : `Facing the ${openingTargetLabel} · Indianapolis`}
       </div>
 
       <CompassRibbon />

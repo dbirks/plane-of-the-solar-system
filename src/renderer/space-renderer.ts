@@ -2,6 +2,7 @@ import * as THREE from "three/webgpu";
 
 import { useAppStore } from "../app/app-store";
 import type { FeatureFlags } from "../app/feature-flags";
+import { type BrightStar, chooseOpeningTarget } from "../astronomy/opening-target";
 import { computeSkyState, type SkyState } from "../astronomy/sky-state";
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
 import {
@@ -19,9 +20,27 @@ import {
 import { EARTH_MEAN_RADIUS_M } from "../coordinates/units";
 import { createContinentOutlines } from "../scene/earth/continent-outlines";
 import { SkyLayer } from "../scene/sky/sky-layer";
-import { STAR_COUNT } from "../scene/sky/star-catalog";
+import {
+  STAR_COUNT,
+  STAR_DEC_DEG,
+  STAR_MAG,
+  STAR_NAMES,
+  STAR_RA_DEG,
+} from "../scene/sky/star-catalog";
 import { SimulationClock } from "../simulation/simulation-clock";
+import { SkyOverlay } from "../ui/sky-overlay";
 import { createRenderer } from "./renderer-factory";
+
+const NAMED_BRIGHT_STARS: readonly BrightStar[] = STAR_NAMES.map(([index, name]) => ({
+  name,
+  raDeg: STAR_RA_DEG[index]!,
+  decDeg: STAR_DEC_DEG[index]!,
+  magnitude: STAR_MAG[index]!,
+}));
+
+function wrapAngleRad(angle: number): number {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
 
 type SceneObjects = {
   earth: THREE.Mesh;
@@ -193,6 +212,9 @@ export class SpaceRenderer {
   private objects: SceneObjects | null = null;
   private skyLayer: SkyLayer | null = null;
   private skyState: SkyState | null = null;
+  private overlay: SkyOverlay | null = null;
+  private readonly overlayRoot: HTMLElement | null;
+  private lookTarget: { azimuthDeg: number; altitudeDeg: number } | null = null;
   private lastAstronomyUtcMs = Number.NEGATIVE_INFINITY;
   private readonly sunDirectionLocal = new THREE.Vector3(0, 1, 0);
   private sunAltitudeDeg = -90;
@@ -211,16 +233,23 @@ export class SpaceRenderer {
   private frameSamplesMs: number[] = [];
   private infoCallsAtLastSample = 0;
   private framesSinceTelemetry = 0;
+  private disposed = false;
   private readonly cleanupCallbacks: Array<() => void> = [];
 
-  constructor(canvas: HTMLCanvasElement, flags: FeatureFlags) {
+  constructor(canvas: HTMLCanvasElement, flags: FeatureFlags, overlayRoot?: HTMLElement | null) {
     this.canvas = canvas;
     this.flags = flags;
+    this.overlayRoot = overlayRoot ?? null;
     this.simulationClock = new SimulationClock(flags.initialUtcMs);
   }
 
   async initialize(): Promise<void> {
     const bundle = await createRenderer(this.canvas, this.flags.renderer, this.flags.depth);
+    // React StrictMode mounts, disposes, and remounts; if dispose ran while
+    // the renderer was being created, do not boot a zombie instance. Do NOT
+    // dispose the bundle either: it shares the canvas context with the live
+    // remounted instance, and disposing it kills that context.
+    if (this.disposed) return;
     this.renderer = bundle.renderer;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -233,7 +262,13 @@ export class SpaceRenderer {
     this.objects = createSceneObjects(this.scene, this.flags.latitudeDeg, this.flags.longitudeDeg);
     this.skyLayer = new SkyLayer();
     this.scene.add(this.skyLayer.group);
+    if (this.overlayRoot) {
+      this.overlay = new SkyOverlay(this.overlayRoot, (azimuthDeg, altitudeDeg) =>
+        this.lookToward(azimuthDeg, altitudeDeg),
+      );
+    }
     this.updateAstronomy(this.simulationClock.read().utcMs);
+    this.applyOpeningTarget();
 
     this.bindInput();
     this.resize();
@@ -251,9 +286,26 @@ export class SpaceRenderer {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.renderer?.setAnimationLoop(null);
     for (const cleanup of this.cleanupCallbacks) cleanup();
+    this.overlay?.dispose();
     this.renderer?.dispose();
+  }
+
+  /** Smoothly steer the free-look offsets toward an alt-az direction. */
+  lookToward(azimuthDeg: number, altitudeDeg: number): void {
+    this.lookTarget = { azimuthDeg, altitudeDeg };
+    this.guidanceRequested = false;
+  }
+
+  /** Aim the opening view at the spec-scored target (Moon, Sun, planet, star, or south). */
+  private applyOpeningTarget(): void {
+    if (!this.skyState) return;
+    const target = chooseOpeningTarget(this.skyState, NAMED_BRIGHT_STARS);
+    this.yawOffset = wrapAngleRad(-THREE.MathUtils.degToRad(target.azimuthDeg));
+    this.pitchOffset = THREE.MathUtils.degToRad(target.aimAltitudeDeg);
+    useAppStore.getState().setOpeningTargetLabel(target.label);
   }
 
   private bindInput(): void {
@@ -261,6 +313,7 @@ export class SpaceRenderer {
     const onPointerDown = (event: PointerEvent) => {
       this.pointerId = event.pointerId;
       this.guidanceRequested = false;
+      this.lookTarget = null;
       this.lastPointer = { x: event.clientX, y: event.clientY };
       this.canvas.setPointerCapture(event.pointerId);
       this.canvas.classList.add("is-dragging");
@@ -325,6 +378,7 @@ export class SpaceRenderer {
     const sky = computeSkyState(utcMs, this.flags.latitudeDeg, this.flags.longitudeDeg);
     this.skyState = sky;
     this.skyLayer?.updateAstronomy(sky);
+    this.overlay?.setSky(sky);
     const [sunX, sunY, sunZ] = sky.sun.directionLocalThree;
     this.sunDirectionLocal.set(sunX, sunY, sunZ);
     this.sunAltitudeDeg = sky.sun.altitudeDeg;
@@ -436,6 +490,27 @@ export class SpaceRenderer {
     this.objects.fillLight.intensity = 0.22 + 0.63 * daylight;
 
     const composition = journeyCompositionForSlider(normalizedScale);
+
+    // Marker-click look-at: ease the free-look offsets toward the body.
+    if (this.lookTarget && this.pointerId === null) {
+      const targetYaw = -THREE.MathUtils.degToRad(this.lookTarget.azimuthDeg);
+      const basePitch = (-Math.PI / 2) * composition;
+      const targetPitch = THREE.MathUtils.clamp(
+        THREE.MathUtils.degToRad(Math.min(60, Math.max(4, this.lookTarget.altitudeDeg))) -
+          basePitch,
+        -0.65,
+        1.52,
+      );
+      const ease = 1 - Math.exp(-5 * deltaSeconds);
+      const yawDelta = wrapAngleRad(targetYaw - this.yawOffset);
+      const pitchDelta = targetPitch - this.pitchOffset;
+      this.yawOffset += yawDelta * ease;
+      this.pitchOffset += pitchDelta * ease;
+      if (Math.abs(yawDelta) < 0.004 && Math.abs(pitchDelta) < 0.004) {
+        this.lookTarget = null;
+      }
+    }
+
     const baseQuaternion = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(1, 0, 0),
       (-Math.PI / 2) * composition,
@@ -466,6 +541,8 @@ export class SpaceRenderer {
     }
 
     this.renderer.render(this.scene, this.camera);
+    const headingDeg = ((-THREE.MathUtils.radToDeg(this.yawOffset) % 360) + 360) % 360;
+    this.overlay?.update(this.camera, headingDeg, altitudeM);
     this.framesSinceTelemetry += 1;
     this.collectTelemetry(
       timeMs,

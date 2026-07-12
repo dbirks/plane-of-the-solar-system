@@ -180,10 +180,7 @@ input:focus-visible {
   z-index: 4;
   top: 30px;
   left: 50%;
-  display: flex;
   width: min(360px, 42vw);
-  align-items: center;
-  justify-content: space-between;
   transform: translateX(-50%);
   color: rgb(211 232 232 / 0.52);
   font-size: 0.61rem;
@@ -193,6 +190,7 @@ input:focus-visible {
 
 .compass-ribbon::before {
   position: absolute;
+  z-index: 1;
   top: 17px;
   left: 50%;
   width: 1px;
@@ -201,9 +199,89 @@ input:focus-visible {
   content: "";
 }
 
-.compass-ribbon strong {
+.compass-window {
+  position: relative;
+  overflow: hidden;
+  height: 16px;
+  mask-image: linear-gradient(to right, transparent, black 18%, black 82%, transparent);
+}
+
+.compass-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 2880px;
+  will-change: transform;
+}
+
+.compass-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+.compass-tick--major {
   color: #f4e9d4;
   font-size: 0.7rem;
+}
+
+.sky-overlay {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sky-marker-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.sky-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  margin: -9px 0 0 -9px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgb(226 240 240 / 0.78);
+  font: inherit;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  pointer-events: auto;
+  cursor: pointer;
+  will-change: transform;
+}
+
+.sky-marker-ring {
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgb(245 201 119 / 0.75);
+  border-radius: 999px;
+  box-shadow: 0 0 10px rgb(245 201 119 / 0.25);
+}
+
+.sky-marker:hover .sky-marker-ring,
+.sky-marker:focus-visible .sky-marker-ring {
+  border-color: #f5c977;
+  box-shadow: 0 0 14px rgb(245 201 119 / 0.55);
+}
+
+.sky-marker--ghost {
+  color: rgb(226 240 240 / 0.38);
+}
+
+.sky-marker--ghost .sky-marker-ring {
+  border-style: dashed;
+  border-color: rgb(148 175 180 / 0.45);
+  box-shadow: none;
 }
 
 .scale-control {
@@ -542,4 +620,14 @@ input:focus-visible {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+.sky-marker--edge .sky-marker-label {
+  display: none;
+}
+
+.sky-marker--edge .sky-marker-ring {
+  width: 10px;
+  height: 10px;
+  opacity: 0.6;
 }

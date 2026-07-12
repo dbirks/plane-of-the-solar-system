@@ -4,6 +4,7 @@ import type { FeatureFlags } from "../app/feature-flags";
 export function DebugPanel({ flags }: { flags: FeatureFlags }) {
   const telemetry = useAppStore((state) => state.telemetry);
   const skyReadout = useAppStore((state) => state.skyReadout);
+  const openingTargetLabel = useAppStore((state) => state.openingTargetLabel);
 
   if (!flags.debug) return null;
 
@@ -44,6 +45,7 @@ export function DebugPanel({ flags }: { flags: FeatureFlags }) {
         `${skyReadout.moonPhaseDeg.toFixed(1)}° · ${(skyReadout.moonIlluminatedFraction * 100).toFixed(1)}% lit`,
       ],
       ["Catalog stars", String(skyReadout.visibleStarCount)],
+      ["Opening target", openingTargetLabel ?? "—"],
     );
   }
 
