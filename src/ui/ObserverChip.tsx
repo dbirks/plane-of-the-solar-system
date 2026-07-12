@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
+import { useAppStore } from "../app/app-store";
+import { type CompassStop, compassSupported, startCompass } from "../location/compass-mode";
 import {
   clearSavedObserver,
   type ObserverLocation,
@@ -33,6 +35,26 @@ export function ObserverChip({
   const [longitudeInput, setLongitudeInput] = useState(observer.longitudeDeg.toFixed(4));
   const [geoStatus, setGeoStatus] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [compassActive, setCompassActive] = useState(false);
+  const compassStopRef = useRef<CompassStop | null>(null);
+  const setCompassHeadingDeg = useAppStore((state) => state.setCompassHeadingDeg);
+
+  const toggleCompass = async () => {
+    if (compassActive) {
+      compassStopRef.current?.();
+      compassStopRef.current = null;
+      setCompassHeadingDeg(null);
+      setCompassActive(false);
+      return;
+    }
+    const stop = await startCompass((headingDeg) => setCompassHeadingDeg(headingDeg));
+    if (!stop) {
+      setGeoStatus("Compass alignment is not available on this device or was declined.");
+      return;
+    }
+    compassStopRef.current = stop;
+    setCompassActive(true);
+  };
 
   const facingText =
     facingLabel === null
@@ -131,6 +153,11 @@ export function ObserverChip({
             <button type="button" className="quiet-button" onClick={useDeviceLocation}>
               Use device location
             </button>
+            {compassSupported() && (
+              <button type="button" className="quiet-button" onClick={() => void toggleCompass()}>
+                {compassActive ? "Compass on" : "Align with compass"}
+              </button>
+            )}
             <button type="button" className="quiet-button" onClick={saveDefault}>
               {savedFlash ? "Saved" : "Save as default"}
             </button>

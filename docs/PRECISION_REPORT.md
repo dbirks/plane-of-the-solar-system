@@ -80,3 +80,9 @@ Screenshots are in `artifacts/screenshots/`, including clean ground, atmosphere,
 - Heliocentric positions are validated by invariant tests (distance bands, ecliptic latitudes) rather than a second ephemeris; astronomy-engine remains the single source of truth, already cross-checked against Meeus for the Sun and Moon.
 - Live checks at both new landmarks: inner system centers the Sun with Mercury/Venus/Mars markers on their orbit rings; full system shows every orbit to Pluto obliquely (the ecliptic plane reads directly), 60 fps, heliocentric domain, render scale 6.278×10⁻¹⁰ units/m.
 - Nothing is enlarged: planets render at true radii (sub-pixel at system scale) with screen-space markers for discoverability.
+
+## Phase 5 addendum (2026-07-12)
+
+- NASA Earth imagery (day + night, ~1.1 MB committed) loads after the opening scene and never blocks it; texture coastlines align with the code-native outlines (shared observer quaternion), providing a visual cross-check of the globe orientation. 60 fps held with the textured globe and night-lights terminator blend.
+- Layers panel defaults verified sparse (axis and sky grid off); marker labels declutter at system scale; compass mapping unit-tested; adaptive pixel-ratio guard in place (never touches astronomical accuracy).
+- Total transfer including imagery remains ~2.5 MB gzipped, well inside the 8 MB budget.

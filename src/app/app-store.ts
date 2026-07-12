@@ -35,6 +35,30 @@ export type SkyReadout = {
   bodies: readonly BodyReadout[];
 };
 
+/** Optional explanation layers (SPEC §12); geometry stays sparse by default. */
+export type LayerId =
+  | "orbit-lines"
+  | "ecliptic-rings"
+  | "moon-orbit"
+  | "sun-guide"
+  | "earth-axis"
+  | "sky-grid"
+  | "marker-labels"
+  | "below-horizon-markers";
+
+export type LayersState = Record<LayerId, boolean>;
+
+export const DEFAULT_LAYERS: LayersState = {
+  "orbit-lines": true,
+  "ecliptic-rings": true,
+  "moon-orbit": true,
+  "sun-guide": true,
+  "earth-axis": false,
+  "sky-grid": false,
+  "marker-labels": true,
+  "below-horizon-markers": true,
+};
+
 export type BodyReadout = {
   id: SkyBodyId;
   label: string;
@@ -50,12 +74,17 @@ type AppState = {
   skyReadout: SkyReadout | null;
   openingTargetLabel: string | null;
   selectedBodyId: SkyBodyId | null;
+  layers: LayersState;
+  /** Live device-compass heading in degrees, or null when compass mode is off. */
+  compassHeadingDeg: number | null;
   reducedMotion: boolean;
   setTargetDistanceM: (distanceM: number) => void;
   setTelemetry: (telemetry: RendererTelemetry) => void;
   setSkyReadout: (skyReadout: SkyReadout) => void;
   setOpeningTargetLabel: (label: string) => void;
   setSelectedBodyId: (bodyId: SkyBodyId | null) => void;
+  setLayer: (layer: LayerId, enabled: boolean) => void;
+  setCompassHeadingDeg: (headingDeg: number | null) => void;
   setReducedMotion: (enabled: boolean) => void;
 };
 
@@ -82,6 +111,8 @@ export const useAppStore = create<AppState>((set) => ({
   skyReadout: null,
   openingTargetLabel: null,
   selectedBodyId: null,
+  layers: DEFAULT_LAYERS,
+  compassHeadingDeg: null,
   reducedMotion:
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   setTargetDistanceM: (targetDistanceM) => set({ targetDistanceM }),
@@ -89,5 +120,7 @@ export const useAppStore = create<AppState>((set) => ({
   setSkyReadout: (skyReadout) => set({ skyReadout }),
   setOpeningTargetLabel: (openingTargetLabel) => set({ openingTargetLabel }),
   setSelectedBodyId: (selectedBodyId) => set({ selectedBodyId }),
+  setLayer: (layer, enabled) => set((state) => ({ layers: { ...state.layers, [layer]: enabled } })),
+  setCompassHeadingDeg: (compassHeadingDeg) => set({ compassHeadingDeg }),
   setReducedMotion: (reducedMotion) => set({ reducedMotion }),
 }));

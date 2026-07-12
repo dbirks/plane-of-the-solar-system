@@ -5,6 +5,7 @@ import { resolveObserverLocation } from "../location/observer-location";
 import { SpaceRenderer } from "../renderer/space-renderer";
 import { BodyInset } from "../ui/BodyInset";
 import { CompassRibbon } from "../ui/CompassRibbon";
+import { LayersPanel } from "../ui/LayersPanel";
 import { DebugPanel } from "../ui/DebugPanel";
 import { MoonInset } from "../ui/MoonInset";
 import { ObserverChip } from "../ui/ObserverChip";
@@ -54,6 +55,7 @@ export function App() {
         </div>
         <div className="header-actions">
           <span className="backend-pill">{telemetry.backend}</span>
+          <LayersPanel />
           <button type="button" className="quiet-button" onClick={() => setShowHelp(!showHelp)}>
             {showHelp ? "Close" : "How to move"}
           </button>

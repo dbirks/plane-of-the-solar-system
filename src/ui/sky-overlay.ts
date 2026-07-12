@@ -115,6 +115,7 @@ export class SkyOverlay {
     altitudeM: number,
     overrides?: Map<string, MoonMarkerOverride>,
     systemReveal = 0,
+    prefs: { labels: boolean; belowHorizon: boolean } = { labels: true, belowHorizon: true },
   ): void {
     const proxyOpacity =
       1 - smoothstepNumber(PROXY_FADE_START_ALTITUDE_M, PROXY_FADE_END_ALTITUDE_M, altitudeM);
@@ -125,9 +126,11 @@ export class SkyOverlay {
       for (const entry of this.markers.values()) {
         const isMoon = entry.body.id === "moon";
         const override = overrides?.get(entry.body.id);
+        const ghosted = entry.element.classList.contains("sky-marker--ghost");
         // The Moon's marker persists (physical body); other markers show at
         // ground scale as sky proxies and again at system scale.
-        const opacity = isMoon ? 1 : Math.max(proxyOpacity, override ? systemReveal : 0);
+        let opacity = isMoon ? 1 : Math.max(proxyOpacity, override ? systemReveal : 0);
+        if (ghosted && !prefs.belowHorizon) opacity = 0;
         if (opacity <= 0.02) {
           entry.visible = false;
           if (entry.element.style.display !== "none") entry.element.style.display = "none";
@@ -180,6 +183,21 @@ export class SkyOverlay {
         entry.screenY = screenY;
         entry.visible = true;
         entry.element.style.transform = `translate(${screenX.toFixed(1)}px, ${screenY.toFixed(1)}px)`;
+      }
+
+      // Label declutter: brightest bodies keep their labels; a label within
+      // 34 px of an already-labeled marker hides (the ring stays selectable).
+      const labelOrder = [...this.markers.values()]
+        .filter((entry) => entry.visible)
+        .sort((a, b) => a.body.magnitude - b.body.magnitude);
+      const labeled: MarkerEntry[] = [];
+      for (const entry of labelOrder) {
+        const collides = labeled.some(
+          (kept) => Math.hypot(kept.screenX - entry.screenX, kept.screenY - entry.screenY) < 34,
+        );
+        const showLabel = prefs.labels && !collides;
+        entry.element.classList.toggle("sky-marker--nolabel", !showLabel);
+        if (showLabel) labeled.push(entry);
       }
     }
 

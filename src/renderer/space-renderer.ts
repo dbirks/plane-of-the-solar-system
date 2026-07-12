@@ -1,3 +1,4 @@
+import { uniform } from "three/tsl";
 import * as THREE from "three/webgpu";
 
 import { useAppStore } from "../app/app-store";
@@ -26,7 +27,12 @@ import {
   sliderToDistance,
 } from "../camera/scale-domains";
 import { EARTH_MEAN_RADIUS_M } from "../coordinates/units";
-import { createContinentOutlines } from "../scene/earth/continent-outlines";
+import {
+  createContinentOutlines,
+  observerToZenithQuaternion,
+} from "../scene/earth/continent-outlines";
+import { createEarthGlobeMaterial, loadEarthTextures } from "../scene/earth/earth-globe";
+import { createEarthGuides } from "../scene/earth/earth-guides";
 import { buildGlowTexture, SkyLayer } from "../scene/sky/sky-layer";
 import { SolarSystemLayer } from "../scene/sky/solar-system-layer";
 import {
@@ -241,6 +247,11 @@ export class SpaceRenderer {
   private lastOrbitUtcMs = Number.NEGATIVE_INFINITY;
   private moonPlacement: MoonPlacement | null = null;
   private readonly sunDirectionLocal = new THREE.Vector3(0, 1, 0);
+  private readonly sunDirectionUniform = uniform(new THREE.Vector3(0, 1, 0));
+  private earthGuides: THREE.LineSegments | null = null;
+  private slowFrameStreak = 0;
+  private adaptiveDprCap = Number.POSITIVE_INFINITY;
+  private lastDprDropMs = 0;
   private sunAltitudeDeg = -90;
   private distanceSpring: SpringState = {
     value: Math.log(JOURNEY_MIN_DISTANCE_M),
@@ -290,6 +301,22 @@ export class SpaceRenderer {
     this.scene.add(this.skyLayer.group);
     this.solarLayer = new SolarSystemLayer(buildGlowTexture());
     this.scene.add(this.solarLayer.group);
+    this.earthGuides = createEarthGuides(this.flags.latitudeDeg, this.flags.longitudeDeg);
+    this.scene.add(this.earthGuides);
+
+    // Real Earth imagery loads after the opening scene; the flat-shaded globe
+    // stands in until then and remains the fallback if loading fails.
+    void loadEarthTextures(import.meta.env.BASE_URL).then((textures) => {
+      if (!textures || this.disposed || !this.objects) return;
+      this.objects.earth.material = createEarthGlobeMaterial(
+        textures.day,
+        textures.night,
+        this.sunDirectionUniform,
+      );
+      this.objects.earth.quaternion.copy(
+        observerToZenithQuaternion(this.flags.latitudeDeg, this.flags.longitudeDeg),
+      );
+    });
     if (this.overlayRoot) {
       this.overlay = new SkyOverlay(this.overlayRoot, {
         onLook: (azimuthDeg, altitudeDeg) => this.lookToward(azimuthDeg, altitudeDeg),
@@ -417,7 +444,7 @@ export class SpaceRenderer {
     const mobile = width < 760;
     const qualityCap =
       this.flags.quality === "low" ? 1 : mobile ? 1.5 : this.flags.quality === "high" ? 2 : 1.75;
-    const pixelRatio = Math.min(window.devicePixelRatio, qualityCap);
+    const pixelRatio = Math.min(window.devicePixelRatio, qualityCap, this.adaptiveDprCap);
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
     this.skyLayer?.setSizeScale(pixelRatio);
@@ -456,6 +483,7 @@ export class SpaceRenderer {
     }
     const [sunX, sunY, sunZ] = sky.sun.directionLocalThree;
     this.sunDirectionLocal.set(sunX, sunY, sunZ);
+    this.sunDirectionUniform.value.set(sunX, sunY, sunZ);
     this.sunAltitudeDeg = sky.sun.altitudeDeg;
 
     useAppStore.getState().setSkyReadout({
@@ -528,13 +556,24 @@ export class SpaceRenderer {
       this.objects.earth,
       this.objects.atmosphereInside,
       this.objects.atmosphereOutside,
-      this.objects.coordinateGrid,
       this.objects.continentOutlines,
     ];
+    if (this.earthGuides) globalObjects.push(this.earthGuides);
     for (const object of globalObjects) {
       object.position.set(0, earthCenterY, 0);
       object.scale.setScalar(earthRadiusRender);
     }
+    // Earth scale collapses to sub-pixel at system scale; drop the guides too.
+    const layers = appState.layers;
+    if (this.earthGuides) {
+      this.earthGuides.visible = layers["earth-axis"] && earthRadiusRender > 0.02;
+      // Keep the axis/equator on the textured globe's exact orientation.
+      this.earthGuides.quaternion.copy(this.objects.continentOutlines.quaternion);
+    }
+
+    // The old fixed coordinate grid becomes the alt-az sky grid layer.
+    this.objects.coordinateGrid.position.set(0, 0, 0);
+    this.objects.coordinateGrid.scale.setScalar(1_400);
 
     const localFade = 1 - smoothstep(8_000, 90_000, altitudeM);
     const capRadiusM = Math.max(220_000, Math.sqrt(2 * EARTH_MEAN_RADIUS_M * altitudeM) * 1.5);
@@ -561,7 +600,7 @@ export class SpaceRenderer {
       THREE.MathUtils.lerp(0.36, 0.15, atmosphereExit) * (0.18 + 0.82 * daylight);
     this.objects.atmosphereInside.visible = true;
     this.objects.atmosphereOutside.visible = false;
-    this.objects.coordinateGrid.visible = false;
+    this.objects.coordinateGrid.visible = layers["sky-grid"];
 
     // The physical heliocentric layer takes over from the sky proxies as the
     // journey approaches interplanetary scale.
@@ -570,7 +609,10 @@ export class SpaceRenderer {
     if (systemReveal > 0 && this.solarLayer) {
       this.solarLayer.buildOrbits(simulationUtcMs);
     }
-    this.solarLayer?.updateFrame(earthCenterY, renderUnitsPerMeter, systemReveal);
+    this.solarLayer?.updateFrame(earthCenterY, renderUnitsPerMeter, systemReveal, {
+      orbitLines: layers["orbit-lines"],
+      eclipticRings: layers["ecliptic-rings"],
+    });
     const continentReveal = smoothstep(0.3, 0.82, normalizedScale);
     this.objects.continentOutlines.visible = continentReveal > 0.001;
     (this.objects.continentOutlines.material as THREE.LineBasicMaterial).opacity =
@@ -598,7 +640,10 @@ export class SpaceRenderer {
       );
       this.skyLayer?.updateMoonPlacement(this.moonPlacement);
     }
-    this.skyLayer?.updateEarthAnchored(earthCenterY, renderUnitsPerMeter, altitudeM);
+    this.skyLayer?.updateEarthAnchored(earthCenterY, renderUnitsPerMeter, altitudeM, {
+      moonOrbit: layers["moon-orbit"],
+      sunGuide: layers["sun-guide"],
+    });
 
     const composition = journeyCompositionForSlider(normalizedScale);
 
@@ -634,6 +679,14 @@ export class SpaceRenderer {
           baseFovDeg = THREE.MathUtils.lerp(baseFovDeg, framing.fovDeg, framing.blend);
         }
       }
+    }
+
+    // Compass mode: near the ground, ease the view onto the device heading.
+    const compassHeadingDeg = appState.compassHeadingDeg;
+    if (compassHeadingDeg !== null && this.pointerId === null && altitudeM < 200_000) {
+      const targetYaw = wrapAngleRad(-THREE.MathUtils.degToRad(compassHeadingDeg) - baseYawRad);
+      const ease = 1 - Math.exp(-4 * deltaSeconds);
+      this.yawOffset += wrapAngleRad(targetYaw - this.yawOffset) * ease;
     }
 
     // Marker-click look-at: ease the free-look offsets toward the body.
@@ -702,7 +755,10 @@ export class SpaceRenderer {
         });
       }
     }
-    this.overlay?.update(this.camera, headingDeg, altitudeM, overrides, systemReveal);
+    this.overlay?.update(this.camera, headingDeg, altitudeM, overrides, systemReveal, {
+      labels: layers["marker-labels"],
+      belowHorizon: layers["below-horizon-markers"],
+    });
     this.framesSinceTelemetry += 1;
     this.collectTelemetry(
       timeMs,
@@ -732,6 +788,25 @@ export class SpaceRenderer {
 
     const total = this.frameSamplesMs.reduce((sum, sample) => sum + sample, 0);
     const averageFrameMs = this.frameSamplesMs.length ? total / this.frameSamplesMs.length : 0;
+
+    // Adaptive quality: sustained slow frames step the pixel ratio down one
+    // notch (floor 1); astronomical accuracy is never reduced.
+    if (averageFrameMs > 26 && this.frameSamplesMs.length > 60) {
+      this.slowFrameStreak += 1;
+    } else {
+      this.slowFrameStreak = 0;
+    }
+    const currentPixelRatio = this.renderer.getPixelRatio();
+    if (
+      this.slowFrameStreak >= 15 &&
+      currentPixelRatio > 1 &&
+      timeMs - this.lastDprDropMs > 5_000
+    ) {
+      this.adaptiveDprCap = Math.max(1, currentPixelRatio - 0.25);
+      this.lastDprDropMs = timeMs;
+      this.slowFrameStreak = 0;
+      this.resize();
+    }
     const localRepresentationActive = altitudeM < 90_000;
     const largestLocalRenderMagnitude = localRepresentationActive
       ? capRadiusM * renderUnitsPerMeter

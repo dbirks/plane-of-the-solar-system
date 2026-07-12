@@ -4,7 +4,7 @@ An immersive experience that begins about two meters above Earth under the real 
 
 **Live app:** [dbirks.github.io/plane-of-the-solar-system](https://dbirks.github.io/plane-of-the-solar-system/)
 
-Phases 0–4 of `SPEC.md` are implemented: the precision ground-to-whole-Earth journey, the real sky, the Earth–Moon system, and the full solar system to Pluto — all at true scale. Experience polish (Phase 5) is next.
+All six phases of `SPEC.md` (0–5) are implemented: the precision ground-to-whole-Earth journey, the real sky, the Earth–Moon system, the full solar system to Pluto, and the experience layer — all at true scale.
 
 ## What works
 
@@ -17,11 +17,14 @@ Phases 0–4 of `SPEC.md` are implemented: the precision ground-to-whole-Earth j
 - Click the Moon for an inspection inset: phase disc, phase name, illuminated fraction, and distance, always matching the scene geometry
 - Continue out to the **inner system (2.7 AU)** and the **full solar system (53 AU)**: every planet to Pluto at its true current position and radius, riding precomputed orbit lines, with faint ecliptic rings making the plane of the solar system visible
 - Select any body's marker for distances and magnitude; nothing is ever enlarged — markers carry the discoverability
+- **NASA Blue Marble** Earth with **Black Marble city lights** on the physically-lit night side (async-loaded, ~1.1 MB, attributed)
+- A Layers panel for optional explanation geometry: orbits, ecliptic rings, Moon orbit, sunlight direction, Earth axis & equator, sky grid, labels — sparse by default
+- Marker labels declutter automatically when bodies crowd; optional device-compass alignment; adaptive pixel-ratio under sustained slow frames
 - Offline location chain (URL → saved → timezone guess → fallback) with a picker for manual coordinates and opt-in device location — never a permission prompt on opening
 - Direct Three.js `WebGPURenderer` with automatic WebGL 2 fallback and forced-WebGL mode
 - Camera-relative rendering with canonical double-precision meter values; smooth, damped piecewise-logarithmic travel through ground, atmosphere, low orbit, and whole Earth
 - Fixed time/location/debug controls, live precision/performance telemetry, and reduced-motion support
-- 72 unit tests, 36 Playwright scenarios (desktop + mobile), and GitHub Pages deployment
+- 75 unit tests, 44 Playwright scenarios (desktop + mobile), and GitHub Pages deployment
 
 ## Run locally
 

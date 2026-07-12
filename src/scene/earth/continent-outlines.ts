@@ -132,6 +132,24 @@ function lonLatToThree([longitudeDeg, latitudeDeg]: LonLat): THREE.Vector3 {
   return new THREE.Vector3(x, y, z).multiplyScalar(1.0025);
 }
 
+/**
+ * Rotation carrying the observer's surface point to the local zenith (+Y).
+ * Every earth-fixed representation (outlines, texture, axis, equator) shares
+ * this quaternion so they stay mutually aligned.
+ */
+export function observerToZenithQuaternion(
+  observerLatitudeDeg: number,
+  observerLongitudeDeg: number,
+): THREE.Quaternion {
+  const observerEarthFixed = geodeticSurfaceUnitEarthFixed(
+    observerLatitudeDeg,
+    observerLongitudeDeg,
+  );
+  const [observerX, observerY, observerZ] = earthFixedToThree(observerEarthFixed);
+  const observerDirection = new THREE.Vector3(observerX, observerY, observerZ).normalize();
+  return new THREE.Quaternion().setFromUnitVectors(observerDirection, new THREE.Vector3(0, 1, 0));
+}
+
 export function createContinentOutlines(
   observerLatitudeDeg: number,
   observerLongitudeDeg: number,
@@ -155,14 +173,7 @@ export function createContinentOutlines(
     depthWrite: false,
   });
   const outlines = new THREE.LineSegments(geometry, material);
-
-  const observerEarthFixed = geodeticSurfaceUnitEarthFixed(
-    observerLatitudeDeg,
-    observerLongitudeDeg,
-  );
-  const [observerX, observerY, observerZ] = earthFixedToThree(observerEarthFixed);
-  const observerDirection = new THREE.Vector3(observerX, observerY, observerZ).normalize();
-  outlines.quaternion.setFromUnitVectors(observerDirection, new THREE.Vector3(0, 1, 0));
+  outlines.quaternion.copy(observerToZenithQuaternion(observerLatitudeDeg, observerLongitudeDeg));
   outlines.renderOrder = 1;
 
   return outlines;

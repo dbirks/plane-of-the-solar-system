@@ -386,12 +386,17 @@ export class SkyLayer {
     earthCenterRenderY: number,
     renderUnitsPerMeter: number,
     altitudeM: number,
+    gates: { moonOrbit: boolean; sunGuide: boolean },
   ): void {
     const reveal = smoothstepNumber(4_000_000, 30_000_000, altitudeM);
-    for (const guide of [this.moonOrbitGuide, this.sunDirectionGuide]) {
+    const guideStates: ReadonlyArray<[THREE.LineSegments, boolean]> = [
+      [this.moonOrbitGuide, gates.moonOrbit],
+      [this.sunDirectionGuide, gates.sunGuide],
+    ];
+    for (const [guide, enabled] of guideStates) {
       guide.position.set(0, earthCenterRenderY, 0);
       guide.scale.setScalar(renderUnitsPerMeter);
-      guide.visible = reveal > 0.003;
+      guide.visible = enabled && reveal > 0.003;
       (guide.material as THREE.LineBasicMaterial).opacity = reveal * 0.4;
     }
   }

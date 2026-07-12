@@ -112,6 +112,7 @@ export class SolarSystemLayer {
         0x7fb4b8,
         0.07,
       );
+      ring.userData["kind"] = "ecliptic";
       this.fadeLines.push(ring);
       this.helioGroup.add(ring);
     }
@@ -129,6 +130,7 @@ export class SolarSystemLayer {
         0x9fd8dc,
         0.2,
       );
+      orbit.userData["kind"] = "orbit";
       this.fadeLines.push(orbit);
       this.helioGroup.add(orbit);
     }
@@ -169,13 +171,20 @@ export class SolarSystemLayer {
     }
   }
 
-  /** Per-frame anchoring and system-scale reveal. */
-  updateFrame(earthCenterRenderY: number, renderUnitsPerMeter: number, reveal: number): void {
+  /** Per-frame anchoring, system-scale reveal, and layer gating. */
+  updateFrame(
+    earthCenterRenderY: number,
+    renderUnitsPerMeter: number,
+    reveal: number,
+    gates: { orbitLines: boolean; eclipticRings: boolean },
+  ): void {
     this.group.visible = reveal > 0.003;
     if (!this.group.visible) return;
     this.group.position.set(0, earthCenterRenderY, 0);
     this.group.scale.setScalar(renderUnitsPerMeter);
     for (const line of this.fadeLines) {
+      const enabled = line.userData["kind"] === "ecliptic" ? gates.eclipticRings : gates.orbitLines;
+      line.visible = enabled;
       (line.material as THREE.LineBasicMaterial).opacity =
         reveal * (line.userData["baseOpacity"] as number);
     }
