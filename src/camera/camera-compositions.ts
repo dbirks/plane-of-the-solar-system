@@ -12,10 +12,10 @@ export function wholeEarthFovDegForAspect(viewportAspect: number): number {
 
 const COMPOSITION_ANCHORS = [
   { sliderT: 0, composition: 0 },
-  { sliderT: 0.13, composition: 0.01 },
-  { sliderT: 0.3, composition: 0.17 },
-  { sliderT: 0.46, composition: 0.34 },
-  { sliderT: 0.78, composition: 1 },
+  { sliderT: 0.1, composition: 0.01 },
+  { sliderT: 0.24, composition: 0.17 },
+  { sliderT: 0.36, composition: 0.34 },
+  { sliderT: 0.6, composition: 1 },
   { sliderT: 1, composition: 1 },
 ] as const;
 
@@ -70,6 +70,29 @@ export function earthMoonCompositionForAltitude(
 
   const separationRad = Math.acos(Math.min(1, Math.max(-1, -moonY)));
   const fovDeg = Math.min(92, Math.max(baseFovDeg, ((separationRad * 180) / Math.PI) * 0.62 + 30));
+
+  return { blend, guidedYawRad, guidedPitchRad, fovDeg };
+}
+
+/**
+ * Beyond the Earth–Moon band the gaze settles on the Sun (the system center;
+ * from 8×10¹² m out, Earth sits within ~1° of it) and the FOV opens to hold
+ * the whole ecliptic disc out to Pluto's orbit.
+ */
+export function systemCompositionForAltitude(
+  altitudeM: number,
+  sunRayLocal: Vec3d,
+  baseFovDeg: number,
+): EarthMoonComposition {
+  const logAltitude = Math.log10(Math.max(1, altitudeM));
+  const blendT = Math.min(1, Math.max(0, (logAltitude - 9.3) / (11.3 - 9.3)));
+  const blend = blendT * blendT * (3 - 2 * blendT);
+
+  const [sunX, sunY, sunZ] = sunRayLocal;
+  const guidedPitchRad = Math.asin(Math.min(1, Math.max(-1, sunY)));
+  const horizontalLength = Math.hypot(sunX, sunZ);
+  const guidedYawRad = horizontalLength < 1e-9 ? 0 : -Math.atan2(sunX, -sunZ);
+  const fovDeg = Math.max(baseFovDeg, 78);
 
   return { blend, guidedYawRad, guidedPitchRad, fovDeg };
 }

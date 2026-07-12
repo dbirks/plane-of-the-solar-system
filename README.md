@@ -4,7 +4,7 @@ An immersive experience that begins about two meters above Earth under the real 
 
 **Live app:** [dbirks.github.io/plane-of-the-solar-system](https://dbirks.github.io/plane-of-the-solar-system/)
 
-Phases 0–3 of `SPEC.md` are implemented: the precision ground-to-whole-Earth journey, the real sky, and the Earth–Moon system at true scale. The full solar system and experience polish (Phases 4–5) are next.
+Phases 0–4 of `SPEC.md` are implemented: the precision ground-to-whole-Earth journey, the real sky, the Earth–Moon system, and the full solar system to Pluto — all at true scale. Experience polish (Phase 5) is next.
 
 ## What works
 
@@ -15,11 +15,13 @@ Phases 0–3 of `SPEC.md` are implemented: the precision ground-to-whole-Earth j
 - A live sliding compass, day/twilight/night sky driven by true Sun altitude, and stars that emerge through dusk
 - Keep pulling out to the **Earth–Moon landmark at 500,000 km**: the physical Moon at true, uncompressed distance, its real orbit traced around Earth, and a sunlight-direction guide — with a jump-free hand-off from the sky view
 - Click the Moon for an inspection inset: phase disc, phase name, illuminated fraction, and distance, always matching the scene geometry
+- Continue out to the **inner system (2.7 AU)** and the **full solar system (53 AU)**: every planet to Pluto at its true current position and radius, riding precomputed orbit lines, with faint ecliptic rings making the plane of the solar system visible
+- Select any body's marker for distances and magnitude; nothing is ever enlarged — markers carry the discoverability
 - Offline location chain (URL → saved → timezone guess → fallback) with a picker for manual coordinates and opt-in device location — never a permission prompt on opening
 - Direct Three.js `WebGPURenderer` with automatic WebGL 2 fallback and forced-WebGL mode
 - Camera-relative rendering with canonical double-precision meter values; smooth, damped piecewise-logarithmic travel through ground, atmosphere, low orbit, and whole Earth
 - Fixed time/location/debug controls, live precision/performance telemetry, and reduced-motion support
-- 67 unit tests, 30 Playwright scenarios (desktop + mobile), and GitHub Pages deployment
+- 72 unit tests, 36 Playwright scenarios (desktop + mobile), and GitHub Pages deployment
 
 ## Run locally
 

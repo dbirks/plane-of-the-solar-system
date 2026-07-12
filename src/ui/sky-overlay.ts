@@ -113,7 +113,8 @@ export class SkyOverlay {
     camera: THREE.PerspectiveCamera,
     headingDeg: number,
     altitudeM: number,
-    moonOverride?: MoonMarkerOverride,
+    overrides?: Map<string, MoonMarkerOverride>,
+    systemReveal = 0,
   ): void {
     const proxyOpacity =
       1 - smoothstepNumber(PROXY_FADE_START_ALTITUDE_M, PROXY_FADE_END_ALTITUDE_M, altitudeM);
@@ -123,7 +124,10 @@ export class SkyOverlay {
     if (width > 0 && height > 0) {
       for (const entry of this.markers.values()) {
         const isMoon = entry.body.id === "moon";
-        const opacity = isMoon ? 1 : proxyOpacity;
+        const override = overrides?.get(entry.body.id);
+        // The Moon's marker persists (physical body); other markers show at
+        // ground scale as sky proxies and again at system scale.
+        const opacity = isMoon ? 1 : Math.max(proxyOpacity, override ? systemReveal : 0);
         if (opacity <= 0.02) {
           entry.visible = false;
           if (entry.element.style.display !== "none") entry.element.style.display = "none";
@@ -132,11 +136,11 @@ export class SkyOverlay {
         entry.element.style.opacity = opacity.toFixed(3);
 
         let direction = entry.body.directionLocalThree;
-        if (isMoon && moonOverride) {
-          direction = moonOverride.directionLocalThree;
-          entry.lookAltitudeDeg = moonOverride.altitudeDeg;
-          entry.lookAzimuthDeg = moonOverride.azimuthDeg;
-          if (moonOverride.physical) entry.element.classList.remove("sky-marker--ghost");
+        if (override) {
+          direction = override.directionLocalThree;
+          entry.lookAltitudeDeg = override.altitudeDeg;
+          entry.lookAzimuthDeg = override.azimuthDeg;
+          if (override.physical) entry.element.classList.remove("sky-marker--ghost");
         }
 
         const [x, y, z] = direction;

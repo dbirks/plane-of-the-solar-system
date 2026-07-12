@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { type FeatureFlags, readFeatureFlags } from "./feature-flags";
 import { resolveObserverLocation } from "../location/observer-location";
 import { SpaceRenderer } from "../renderer/space-renderer";
+import { BodyInset } from "../ui/BodyInset";
 import { CompassRibbon } from "../ui/CompassRibbon";
 import { DebugPanel } from "../ui/DebugPanel";
 import { MoonInset } from "../ui/MoonInset";
@@ -64,6 +65,7 @@ export function App() {
       <CompassRibbon />
       <ScaleSlider />
       <MoonInset />
+      <BodyInset />
       <DebugPanel flags={flags} />
 
       {showHelp && (

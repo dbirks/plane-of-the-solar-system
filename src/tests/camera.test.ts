@@ -17,21 +17,26 @@ import {
 describe("logarithmic journey scale", () => {
   it("maps both endpoints exactly", () => {
     expect(sliderToDistance(0)).toBeCloseTo(2, 12);
-    expect(sliderToDistance(1)).toBeCloseTo(500_000_000, 4);
+    expect(sliderToDistance(1)).toBeCloseTo(8_000_000_000_000, 1);
   });
 
   it("round-trips values", () => {
-    for (const distanceM of [2, 100_000, 500_000, 20_000_000, 500_000_000]) {
-      expect(sliderToDistance(distanceToSlider(distanceM))).toBeCloseTo(distanceM, 5);
+    for (const distanceM of [2, 100_000, 500_000, 20_000_000, 500_000_000, 8_000_000_000_000]) {
+      // Relative tolerance: absolute float error grows with the magnitude.
+      expect(sliderToDistance(distanceToSlider(distanceM)) / distanceM).toBeCloseTo(1, 9);
     }
   });
 
   it("uses perceptual logarithmic anchors for a responsive ascent", () => {
-    expect(distanceToSlider(1_000)).toBeCloseTo(0.13, 12);
-    expect(distanceToSlider(100_000)).toBeCloseTo(0.3, 12);
-    expect(distanceToSlider(500_000)).toBeCloseTo(0.46, 12);
-    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.78, 12);
-    expect(JOURNEY_LANDMARKS.at(-1)).toMatchObject({ id: "earth-moon", distanceM: 500_000_000 });
+    expect(distanceToSlider(1_000)).toBeCloseTo(0.1, 12);
+    expect(distanceToSlider(100_000)).toBeCloseTo(0.24, 12);
+    expect(distanceToSlider(500_000)).toBeCloseTo(0.36, 12);
+    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.6, 12);
+    expect(distanceToSlider(500_000_000)).toBeCloseTo(0.76, 12);
+    expect(JOURNEY_LANDMARKS.at(-1)).toMatchObject({
+      id: "full-system",
+      distanceM: 8_000_000_000_000,
+    });
   });
 
   it("gently attracts near a landmark without trapping distant values", () => {
@@ -71,9 +76,9 @@ describe("whole-Earth composition", () => {
 
   it("keeps black space visible at the low-orbit landmark", () => {
     expect(journeyCompositionForSlider(0)).toBe(0);
-    expect(journeyCompositionForSlider(0.3)).toBeCloseTo(0.17, 12);
-    expect(journeyCompositionForSlider(0.46)).toBeCloseTo(0.34, 12);
-    expect(journeyCompositionForSlider(0.78)).toBe(1);
+    expect(journeyCompositionForSlider(0.24)).toBeCloseTo(0.17, 12);
+    expect(journeyCompositionForSlider(0.36)).toBeCloseTo(0.34, 12);
+    expect(journeyCompositionForSlider(0.6)).toBe(1);
     expect(journeyCompositionForSlider(1)).toBe(1);
   });
 

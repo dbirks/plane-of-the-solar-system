@@ -131,7 +131,7 @@ function buildPlanetPoints(planetCount: number, initialSizeScale: number): THREE
   return points;
 }
 
-function buildGlowTexture(): THREE.CanvasTexture {
+export function buildGlowTexture(): THREE.CanvasTexture {
   const size = 128;
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -170,7 +170,7 @@ export class SkyLayer {
 
   constructor() {
     this.starPoints = buildStarField(1);
-    this.planetPoints = buildPlanetPoints(5, 1);
+    this.planetPoints = buildPlanetPoints(8, 1);
 
     // Earth-anchored guides: geometry lives in EQJ meters (orbit) or local
     // meters (sun ray); per frame they are positioned at the Earth's render
@@ -324,14 +324,28 @@ export class SkyLayer {
   /**
    * Per-frame altitude response: the sky shell is camera-anchored, so only
    * visibility changes with altitude (space is star-filled even at noon).
+   * `systemReveal` fades the sky-proxy Sun and planet points out as the
+   * physical heliocentric layer takes over.
    */
-  updateAltitude(altitudeM: number, sunAltitudeDeg: number): void {
+  updateAltitude(altitudeM: number, sunAltitudeDeg: number, systemReveal = 0): void {
     const spaceFactor = smoothstepNumber(40_000, 400_000, altitudeM);
     const groundStarOpacity = clamp01((-sunAltitudeDeg - 3) / 11);
     const starOpacity = Math.max(groundStarOpacity, spaceFactor * 0.85);
     this.setPointsOpacity(this.starPoints, starOpacity);
     const groundPlanetOpacity = clamp01((-sunAltitudeDeg + 1) / 8);
-    this.setPointsOpacity(this.planetPoints, Math.max(groundPlanetOpacity, spaceFactor * 0.9));
+    this.setPointsOpacity(
+      this.planetPoints,
+      Math.max(groundPlanetOpacity, spaceFactor * 0.9) * (1 - systemReveal),
+    );
+
+    const sunProxyOpacity = 1 - systemReveal;
+    const sunDiscMaterial = this.sunDisc.material as THREE.MeshBasicMaterial;
+    sunDiscMaterial.transparent = systemReveal > 0;
+    sunDiscMaterial.opacity = sunProxyOpacity;
+    this.sunDisc.visible = sunProxyOpacity > 0.01;
+    const sunGlowMaterial = this.sunGlow.material as THREE.SpriteMaterial;
+    sunGlowMaterial.opacity = sunProxyOpacity;
+    this.sunGlow.visible = sunProxyOpacity > 0.01;
   }
 
   /** Per-frame Moon mesh placement (proxy shell near ground, physical beyond). */

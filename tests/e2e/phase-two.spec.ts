@@ -40,7 +40,7 @@ test("astronomy readouts match the fixed scenario", async ({ page }) => {
 test("sky markers exist for all bright bodies and ghost below the horizon", async ({ page }) => {
   await page.goto(moonScenario);
   const markers = page.locator(".sky-marker");
-  await expect(markers).toHaveCount(7);
+  await expect(markers).toHaveCount(10);
   const moon = page.locator(".sky-marker[data-body=moon]");
   await expect(moon).not.toHaveClass(/sky-marker--ghost/);
   await expect(moon).toHaveAccessibleName(/22 degrees above the horizon/);
@@ -129,7 +129,7 @@ test("sky-proxy markers fade on the journey while the physical Moon's persists",
   page,
 }) => {
   await page.goto(moonScenario);
-  await page.getByRole("slider", { name: "Distance from the ground" }).fill("0.78");
+  await page.getByRole("slider", { name: "Distance from the ground" }).fill("0.6");
   const sunMarker = page.locator(".sky-marker[data-body=sun]");
   await expect
     .poll(async () => sunMarker.evaluate((element) => element.style.display), {

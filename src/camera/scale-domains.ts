@@ -1,31 +1,42 @@
-import { EARTH_MEAN_RADIUS_M, METERS_PER_AU } from "../coordinates/units";
+import { EARTH_MEAN_RADIUS_M } from "../coordinates/units";
 
 export type ScaleDomain = "local" | "earth-centered" | "heliocentric";
 
 export type ScaleLandmark = {
-  id: "ground" | "atmosphere" | "low-orbit" | "whole-earth" | "earth-moon";
+  id:
+    | "ground"
+    | "atmosphere"
+    | "low-orbit"
+    | "whole-earth"
+    | "earth-moon"
+    | "inner-system"
+    | "full-system";
   label: string;
   distanceM: number;
   sliderT: number;
 };
 
 export const JOURNEY_MIN_DISTANCE_M = 2;
-export const JOURNEY_MAX_DISTANCE_M = 500_000_000;
+export const JOURNEY_MAX_DISTANCE_M = 8_000_000_000_000;
 
 export const JOURNEY_LANDMARKS: readonly ScaleLandmark[] = [
   { id: "ground", label: "Ground", distanceM: 2, sliderT: 0 },
-  { id: "atmosphere", label: "Atmosphere", distanceM: 100_000, sliderT: 0.3 },
-  { id: "low-orbit", label: "Low orbit", distanceM: 500_000, sliderT: 0.46 },
-  { id: "whole-earth", label: "Whole Earth", distanceM: 20_000_000, sliderT: 0.78 },
-  { id: "earth-moon", label: "Earth–Moon", distanceM: 500_000_000, sliderT: 1 },
+  { id: "atmosphere", label: "Atmosphere", distanceM: 100_000, sliderT: 0.24 },
+  { id: "low-orbit", label: "Low orbit", distanceM: 500_000, sliderT: 0.36 },
+  { id: "whole-earth", label: "Whole Earth", distanceM: 20_000_000, sliderT: 0.6 },
+  { id: "earth-moon", label: "Earth–Moon", distanceM: 500_000_000, sliderT: 0.76 },
+  { id: "inner-system", label: "Inner system", distanceM: 400_000_000_000, sliderT: 0.89 },
+  { id: "full-system", label: "Solar system", distanceM: JOURNEY_MAX_DISTANCE_M, sliderT: 1 },
 ];
 
 const JOURNEY_SCALE_ANCHORS = [
   { sliderT: 0, distanceM: JOURNEY_MIN_DISTANCE_M },
-  { sliderT: 0.13, distanceM: 1_000 },
-  { sliderT: 0.3, distanceM: 100_000 },
-  { sliderT: 0.46, distanceM: 500_000 },
-  { sliderT: 0.78, distanceM: 20_000_000 },
+  { sliderT: 0.1, distanceM: 1_000 },
+  { sliderT: 0.24, distanceM: 100_000 },
+  { sliderT: 0.36, distanceM: 500_000 },
+  { sliderT: 0.6, distanceM: 20_000_000 },
+  { sliderT: 0.76, distanceM: 500_000_000 },
+  { sliderT: 0.89, distanceM: 400_000_000_000 },
   { sliderT: 1, distanceM: JOURNEY_MAX_DISTANCE_M },
 ] as const;
 
@@ -74,13 +85,30 @@ export function applySoftLandmarkAttraction(normalizedValue: number): number {
 
 export function scaleDomainForDistance(distanceM: number): ScaleDomain {
   if (distanceM < 2_000_000) return "local";
-  if (distanceM < 100 * METERS_PER_AU) return "earth-centered";
+  if (distanceM < 10_000_000_000) return "earth-centered";
   return "heliocentric";
 }
 
+/**
+ * Two-stage adaptive scale. Stage one (10 m → 20,000 km) shrinks Earth from
+ * 1000 to 2.15 render units for the whole-Earth view. Stage two (beyond) keeps
+ * shrinking log-linearly so the full solar system (camera 8×10¹² m out) fits
+ * inside the far plane while proportions stay uniform and true.
+ */
+const STAGE_TWO_START_ALTITUDE_M = 20_000_000;
+const STAGE_TWO_START_RADIUS = 2.15;
+const STAGE_TWO_END_RADIUS = 0.004;
+
 export function earthRenderRadiusForAltitude(altitudeM: number): number {
   const t = Math.min(1, Math.max(0, Math.log10(Math.max(altitudeM, 10) / 10) / 6.3));
-  return 1000 * (1 - t) + 2.15 * t;
+  const stageOneRadius = 1000 * (1 - t) + STAGE_TWO_START_RADIUS * t;
+  if (altitudeM <= STAGE_TWO_START_ALTITUDE_M) return stageOneRadius;
+  const t2 = Math.min(
+    1,
+    Math.log10(altitudeM / STAGE_TWO_START_ALTITUDE_M) /
+      Math.log10(JOURNEY_MAX_DISTANCE_M / STAGE_TWO_START_ALTITUDE_M),
+  );
+  return STAGE_TWO_START_RADIUS * (STAGE_TWO_END_RADIUS / STAGE_TWO_START_RADIUS) ** t2;
 }
 
 export function renderUnitsPerMeterForAltitude(altitudeM: number): number {

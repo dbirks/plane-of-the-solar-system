@@ -155,7 +155,7 @@ describe("computeSkyState against independent Meeus reference (frames: HOR geome
     expect(sky.moon.angularRadiusDeg).toBeLessThan(0.3);
   });
 
-  it("returns the five bright planets with finite state", () => {
+  it("returns the eight planets to Pluto with finite state", () => {
     const sky = computeSkyState(
       FIXED_CASES[0].utcMs,
       FIXED_CASES[0].latitudeDeg,
@@ -167,6 +167,9 @@ describe("computeSkyState against independent Meeus reference (frames: HOR geome
       "mars",
       "jupiter",
       "saturn",
+      "uranus",
+      "neptune",
+      "pluto",
     ]);
     for (const planet of sky.planets) {
       expect(Number.isFinite(planet.altitudeDeg)).toBe(true);

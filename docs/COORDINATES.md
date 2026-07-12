@@ -8,7 +8,7 @@
 | `LOCAL_THREE`           | +X east, +Y up, +Z south                   | render units               | Ground camera and controls        |
 | `EARTH_FIXED`           | +X lat 0/lon 0, +Z north pole              | meters                     | Observer location and marker      |
 | `EARTH_CENTERED_RENDER` | Three Y-up, camera-relative                | adaptive render units      | Phase 1 Earth scene               |
-| `HELIOCENTRIC_RENDER`   | ecliptic mapped to Three Y-up              | adaptive render units      | Reserved for solar-system phase   |
+| `HELIOCENTRIC_RENDER`   | EQJ meters, Earth-anchored group           | adaptive render units      | Phase 4 solar-system layer        |
 
 Mappings required by the spec:
 

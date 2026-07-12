@@ -73,3 +73,10 @@ Screenshots are in `artifacts/screenshots/`, including clean ground, atmosphere,
 - Moon placement is continuous across the proxy→physical hand-off: unit tests bound the direction change at the boundary below 1e-5 rad and the angular-size change below 1e-5 rad, and the physical regime round-trips `renderDistance / scale` to the true camera distance to four decimals.
 - Live check at the Earth–Moon landmark: Earth and Moon share the frame at true scale, the orbit guide (one sidereal month of GeoMoon samples) passes through the Moon, the sunlight guide leaves Earth's lit side, and the inset reports the same phase/fraction as the debug readout. 60 fps held.
 - Found during Phase 3: `THREE.LineLoop` silently does not render on the WebGPU-flavored renderer (WebGL 2 backend); guides use `LineSegments` (ADR-0007).
+
+## Phase 4 addendum (2026-07-12)
+
+- The journey now spans 2 m → 8×10¹² m (53.48 AU). Stage-two adaptive scale ends at 6.28×10⁻¹⁰ render units per meter; the far plane moved to 50,000 render units with reversed depth, and no near-surface regression was observed in the fixed ground scenario.
+- Heliocentric positions are validated by invariant tests (distance bands, ecliptic latitudes) rather than a second ephemeris; astronomy-engine remains the single source of truth, already cross-checked against Meeus for the Sun and Moon.
+- Live checks at both new landmarks: inner system centers the Sun with Mercury/Venus/Mars markers on their orbit rings; full system shows every orbit to Pluto obliquely (the ecliptic plane reads directly), 60 fps, heliocentric domain, render scale 6.278×10⁻¹⁰ units/m.
+- Nothing is enlarged: planets render at true radii (sub-pixel at system scale) with screen-space markers for discoverability.

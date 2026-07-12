@@ -14,6 +14,7 @@ import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
 import {
   earthMoonCompositionForAltitude,
   journeyCompositionForSlider,
+  systemCompositionForAltitude,
   wholeEarthFovDegForAspect,
 } from "../camera/camera-compositions";
 import {
@@ -26,7 +27,8 @@ import {
 } from "../camera/scale-domains";
 import { EARTH_MEAN_RADIUS_M } from "../coordinates/units";
 import { createContinentOutlines } from "../scene/earth/continent-outlines";
-import { SkyLayer } from "../scene/sky/sky-layer";
+import { buildGlowTexture, SkyLayer } from "../scene/sky/sky-layer";
+import { SolarSystemLayer } from "../scene/sky/solar-system-layer";
 import {
   STAR_COUNT,
   STAR_DEC_DEG,
@@ -35,8 +37,18 @@ import {
   STAR_RA_DEG,
 } from "../scene/sky/star-catalog";
 import { SimulationClock } from "../simulation/simulation-clock";
-import { SkyOverlay } from "../ui/sky-overlay";
+import { subtractVec3d, type Vec3d } from "../coordinates/vec3d";
+import { type MoonMarkerOverride, SkyOverlay } from "../ui/sky-overlay";
 import { createRenderer } from "./renderer-factory";
+
+/** Rotate an EQJ-frame vector into the local Three frame (row-major matrix). */
+function rotateEqjToLocal(m: SkyState["eqjToLocalThree"], [x, y, z]: Vec3d): Vec3d {
+  return [
+    m[0] * x + m[1] * y + m[2] * z,
+    m[3] * x + m[4] * y + m[5] * z,
+    m[6] * x + m[7] * y + m[8] * z,
+  ];
+}
 
 const NAMED_BRIGHT_STARS: readonly BrightStar[] = STAR_NAMES.map(([index, name]) => ({
   name,
@@ -218,7 +230,10 @@ export class SpaceRenderer {
   private camera: THREE.PerspectiveCamera | null = null;
   private objects: SceneObjects | null = null;
   private skyLayer: SkyLayer | null = null;
+  private solarLayer: SolarSystemLayer | null = null;
   private skyState: SkyState | null = null;
+  /** Geocentric body positions in local-frame meters, cached per astronomy tick. */
+  private readonly bodyGeoLocalM = new Map<string, Vec3d>();
   private overlay: SkyOverlay | null = null;
   private readonly overlayRoot: HTMLElement | null;
   private lookTarget: { azimuthDeg: number; altitudeDeg: number } | null = null;
@@ -268,11 +283,13 @@ export class SpaceRenderer {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x020711);
-    this.camera = new THREE.PerspectiveCamera(58, 1, 0.00001, 5000);
+    this.camera = new THREE.PerspectiveCamera(58, 1, 0.00001, 50_000);
     this.camera.position.set(0, 0, 0);
     this.objects = createSceneObjects(this.scene, this.flags.latitudeDeg, this.flags.longitudeDeg);
     this.skyLayer = new SkyLayer();
     this.scene.add(this.skyLayer.group);
+    this.solarLayer = new SolarSystemLayer(buildGlowTexture());
+    this.scene.add(this.solarLayer.group);
     if (this.overlayRoot) {
       this.overlay = new SkyOverlay(this.overlayRoot, {
         onLook: (azimuthDeg, altitudeDeg) => this.lookToward(azimuthDeg, altitudeDeg),
@@ -309,6 +326,18 @@ export class SpaceRenderer {
   lookToward(azimuthDeg: number, altitudeDeg: number): void {
     this.lookTarget = { azimuthDeg, altitudeDeg };
     this.guidanceRequested = false;
+  }
+
+  /**
+   * Camera-relative unit ray toward a geocentric local-frame position. The
+   * camera sits at earth-center + (R + altitude) along the observer zenith.
+   */
+  private rayFromGeoLocal(geoLocalM: Vec3d, altitudeM: number): Vec3d {
+    const x = geoLocalM[0];
+    const y = geoLocalM[1] - (altitudeM + EARTH_MEAN_RADIUS_M);
+    const z = geoLocalM[2];
+    const lengthM = Math.hypot(x, y, z) || 1;
+    return [x / lengthM, y / lengthM, z / lengthM];
   }
 
   /** Aim the opening view at the spec-scored target (Moon, Sun, planet, star, or south). */
@@ -402,7 +431,23 @@ export class SpaceRenderer {
     const sky = computeSkyState(utcMs, this.flags.latitudeDeg, this.flags.longitudeDeg);
     this.skyState = sky;
     this.skyLayer?.updateAstronomy(sky);
+    this.solarLayer?.updateAstronomy(sky);
     this.overlay?.setSky(sky);
+
+    // Geocentric positions in local-frame meters for system-scale markers.
+    this.bodyGeoLocalM.clear();
+    for (const planet of sky.planets) {
+      this.bodyGeoLocalM.set(
+        planet.id,
+        rotateEqjToLocal(sky.eqjToLocalThree, subtractVec3d(planet.helioEqjM, sky.earthHelioEqjM)),
+      );
+    }
+    // Topocentric → earth-centered: the observer sits R above the center.
+    this.bodyGeoLocalM.set("sun", [
+      sky.sun.directionLocalThree[0] * sky.sun.distanceM,
+      sky.sun.directionLocalThree[1] * sky.sun.distanceM + EARTH_MEAN_RADIUS_M,
+      sky.sun.directionLocalThree[2] * sky.sun.distanceM,
+    ]);
 
     // The orbit guide is stable in EQJ; refresh only when hours stale.
     if (Math.abs(utcMs - this.lastOrbitUtcMs) > 6 * 3_600_000) {
@@ -422,6 +467,18 @@ export class SpaceRenderer {
       moonPhaseDeg: sky.moonPhaseDeg,
       moonDistanceM: sky.moon.distanceM,
       visibleStarCount: sky.sun.altitudeDeg < -3 ? STAR_COUNT : 0,
+      bodies: [sky.sun, sky.moon, ...sky.planets].map((body) => ({
+        id: body.id,
+        label: body.label,
+        magnitude: body.magnitude,
+        distanceFromObserverM: body.distanceM,
+        distanceFromSunM:
+          body.id === "sun"
+            ? 0
+            : body.id === "moon"
+              ? sky.sun.distanceM
+              : Math.hypot(body.helioEqjM[0], body.helioEqjM[1], body.helioEqjM[2]),
+      })),
     });
   }
 
@@ -439,6 +496,8 @@ export class SpaceRenderer {
     const targetLogMeters = Math.log(appState.targetDistanceM);
     if (Math.abs(targetLogMeters - this.previousTargetLogMeters) > 0.0001) {
       this.guidanceRequested = true;
+      // Scale travel supersedes a pending marker look-at.
+      this.lookTarget = null;
       this.previousTargetLogMeters = targetLogMeters;
     }
     if (this.pointerId === null && this.guidanceRequested) {
@@ -503,7 +562,15 @@ export class SpaceRenderer {
     this.objects.atmosphereInside.visible = true;
     this.objects.atmosphereOutside.visible = false;
     this.objects.coordinateGrid.visible = false;
-    this.skyLayer?.updateAltitude(altitudeM, this.sunAltitudeDeg);
+
+    // The physical heliocentric layer takes over from the sky proxies as the
+    // journey approaches interplanetary scale.
+    const systemReveal = smoothstep(1e9, 8e9, altitudeM);
+    this.skyLayer?.updateAltitude(altitudeM, this.sunAltitudeDeg, systemReveal);
+    if (systemReveal > 0 && this.solarLayer) {
+      this.solarLayer.buildOrbits(simulationUtcMs);
+    }
+    this.solarLayer?.updateFrame(earthCenterY, renderUnitsPerMeter, systemReveal);
     const continentReveal = smoothstep(0.3, 0.82, normalizedScale);
     this.objects.continentOutlines.visible = continentReveal > 0.001;
     (this.objects.continentOutlines.material as THREE.LineBasicMaterial).opacity =
@@ -556,6 +623,18 @@ export class SpaceRenderer {
         baseFovDeg = THREE.MathUtils.lerp(baseFovDeg, framing.fovDeg, framing.blend);
       }
     }
+    if (this.skyState) {
+      const sunGeoLocalM = this.bodyGeoLocalM.get("sun");
+      if (sunGeoLocalM) {
+        const sunRay = this.rayFromGeoLocal(sunGeoLocalM, altitudeM);
+        const framing = systemCompositionForAltitude(altitudeM, sunRay, baseFovDeg);
+        if (framing.blend > 0) {
+          basePitchRad = THREE.MathUtils.lerp(basePitchRad, framing.guidedPitchRad, framing.blend);
+          baseYawRad = baseYawRad + wrapAngleRad(framing.guidedYawRad - baseYawRad) * framing.blend;
+          baseFovDeg = THREE.MathUtils.lerp(baseFovDeg, framing.fovDeg, framing.blend);
+        }
+      }
+    }
 
     // Marker-click look-at: ease the free-look offsets toward the body.
     if (this.lookTarget && this.pointerId === null) {
@@ -604,14 +683,26 @@ export class SpaceRenderer {
 
     this.renderer.render(this.scene, this.camera);
     const headingDeg = ((-THREE.MathUtils.radToDeg(baseYawRad + this.yawOffset) % 360) + 360) % 360;
-    const moonOverride = this.moonPlacement
-      ? {
-          directionLocalThree: this.moonPlacement.rayLocal,
-          ...rayToAltAzDeg(this.moonPlacement.rayLocal),
-          physical: this.moonPlacement.physical,
-        }
-      : undefined;
-    this.overlay?.update(this.camera, headingDeg, altitudeM, moonOverride);
+    const overrides = new Map<string, MoonMarkerOverride>();
+    if (this.moonPlacement) {
+      overrides.set("moon", {
+        directionLocalThree: this.moonPlacement.rayLocal,
+        ...rayToAltAzDeg(this.moonPlacement.rayLocal),
+        physical: this.moonPlacement.physical,
+      });
+    }
+    if (systemReveal > 0) {
+      for (const [bodyId, geoLocalM] of this.bodyGeoLocalM) {
+        if (bodyId === "moon") continue;
+        const ray = this.rayFromGeoLocal(geoLocalM, altitudeM);
+        overrides.set(bodyId, {
+          directionLocalThree: ray,
+          ...rayToAltAzDeg(ray),
+          physical: true,
+        });
+      }
+    }
+    this.overlay?.update(this.camera, headingDeg, altitudeM, overrides, systemReveal);
     this.framesSinceTelemetry += 1;
     this.collectTelemetry(
       timeMs,

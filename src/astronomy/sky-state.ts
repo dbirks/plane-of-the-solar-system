@@ -1,6 +1,7 @@
 import {
   Body,
   Equator,
+  HelioVector,
   Horizon,
   Illumination,
   MakeTime,
@@ -13,7 +14,17 @@ import { horizonToLocalThree } from "../coordinates/transforms";
 import { degreesToRadians, METERS_PER_AU } from "../coordinates/units";
 import type { Vec3d } from "../coordinates/vec3d";
 
-export type SkyBodyId = "sun" | "moon" | "mercury" | "venus" | "mars" | "jupiter" | "saturn";
+export type SkyBodyId =
+  | "sun"
+  | "moon"
+  | "mercury"
+  | "venus"
+  | "mars"
+  | "jupiter"
+  | "saturn"
+  | "uranus"
+  | "neptune"
+  | "pluto";
 
 export type SkyBodyState = {
   id: SkyBodyId;
@@ -32,6 +43,10 @@ export type SkyBodyState = {
   illuminatedFraction: number;
   /** Unit direction toward the body in the local Three frame. */
   directionLocalThree: Vec3d;
+  /** Physical mean radius, for true-size rendering. */
+  radiusM: number;
+  /** Heliocentric position in J2000 equatorial (EQJ) meters; [0,0,0] for the Sun. */
+  helioEqjM: Vec3d;
 };
 
 export type SkyState = {
@@ -40,7 +55,10 @@ export type SkyState = {
   observerLongitudeDeg: number;
   sun: SkyBodyState;
   moon: SkyBodyState;
+  /** Mercury through Pluto, in order from the Sun. */
   planets: readonly SkyBodyState[];
+  /** Earth's heliocentric position in EQJ meters (offsets the planet group). */
+  earthHelioEqjM: Vec3d;
   /** Moon phase angle: 0 new, 90 first quarter, 180 full, 270 third quarter. */
   moonPhaseDeg: number;
   /**
@@ -79,6 +97,9 @@ const BODY_DEFINITIONS: readonly BodyDefinition[] = [
   { id: "mars", label: "Mars", body: Body.Mars, radiusM: 3_389_500 },
   { id: "jupiter", label: "Jupiter", body: Body.Jupiter, radiusM: 69_911_000 },
   { id: "saturn", label: "Saturn", body: Body.Saturn, radiusM: 58_232_000 },
+  { id: "uranus", label: "Uranus", body: Body.Uranus, radiusM: 25_362_000 },
+  { id: "neptune", label: "Neptune", body: Body.Neptune, radiusM: 24_622_000 },
+  { id: "pluto", label: "Pluto", body: Body.Pluto, radiusM: 1_188_300 },
 ];
 
 /** Convert an alt-az direction (degrees, azimuth from north toward east) to a local-Three unit vector. */
@@ -102,6 +123,8 @@ function computeBodyState(
   const geometric = Horizon(time, observer, topocentricEqd.ra, topocentricEqd.dec);
   const distanceM = topocentricEqd.dist * METERS_PER_AU;
   const illumination = Illumination(definition.body, time);
+  const helioEqjAu =
+    definition.id === "sun" || definition.id === "moon" ? null : HelioVector(definition.body, time);
 
   return {
     id: definition.id,
@@ -114,6 +137,10 @@ function computeBodyState(
     magnitude: illumination.mag,
     illuminatedFraction: definition.id === "sun" ? 1 : illumination.phase_fraction,
     directionLocalThree: altAzToLocalThree(apparent.altitude, apparent.azimuth),
+    radiusM: definition.radiusM,
+    helioEqjM: helioEqjAu
+      ? [helioEqjAu.x * METERS_PER_AU, helioEqjAu.y * METERS_PER_AU, helioEqjAu.z * METERS_PER_AU]
+      : [0, 0, 0],
   };
 }
 
@@ -150,6 +177,8 @@ export function computeSkyState(
     -northRow[2],
   ] as const;
 
+  const earthHelio = HelioVector(Body.Earth, time);
+
   return {
     utcMs,
     observerLatitudeDeg,
@@ -157,6 +186,11 @@ export function computeSkyState(
     sun,
     moon,
     planets,
+    earthHelioEqjM: [
+      earthHelio.x * METERS_PER_AU,
+      earthHelio.y * METERS_PER_AU,
+      earthHelio.z * METERS_PER_AU,
+    ],
     moonPhaseDeg: MoonPhase(time),
     eqjToLocalThree,
   };

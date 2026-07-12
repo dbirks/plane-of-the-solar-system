@@ -31,6 +31,17 @@ export type SkyReadout = {
   moonPhaseDeg: number;
   moonDistanceM: number;
   visibleStarCount: number;
+  /** One entry per body for selection info (Sun, Moon, planets to Pluto). */
+  bodies: readonly BodyReadout[];
+};
+
+export type BodyReadout = {
+  id: SkyBodyId;
+  label: string;
+  magnitude: number;
+  distanceFromObserverM: number;
+  /** 0 for the Sun itself. */
+  distanceFromSunM: number;
 };
 
 type AppState = {
