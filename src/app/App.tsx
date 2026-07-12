@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 
-import { readFeatureFlags } from "./feature-flags";
+import { type FeatureFlags, readFeatureFlags } from "./feature-flags";
+import { resolveObserverLocation } from "../location/observer-location";
 import { SpaceRenderer } from "../renderer/space-renderer";
 import { CompassRibbon } from "../ui/CompassRibbon";
 import { DebugPanel } from "../ui/DebugPanel";
+import { ObserverChip } from "../ui/ObserverChip";
 import { ScaleSlider } from "../ui/ScaleSlider";
 import { useAppStore } from "./app-store";
 
-const flags = readFeatureFlags();
+const observer = resolveObserverLocation(window.location.search, window.localStorage);
+const flags: FeatureFlags = {
+  ...readFeatureFlags(),
+  latitudeDeg: observer.latitudeDeg,
+  longitudeDeg: observer.longitudeDeg,
+};
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -51,14 +58,7 @@ export function App() {
         </div>
       </header>
 
-      <div className="observer-label">
-        <span className="pulse-dot" />
-        {openingTargetLabel === null
-          ? "Indianapolis"
-          : openingTargetLabel === "South"
-            ? "Facing south · Indianapolis"
-            : `Facing the ${openingTargetLabel} · Indianapolis`}
-      </div>
+      <ObserverChip observer={observer} facingLabel={openingTargetLabel} />
 
       <CompassRibbon />
       <ScaleSlider />
