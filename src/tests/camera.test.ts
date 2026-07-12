@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { stepCriticalSpring } from "../camera/camera-spring";
 import {
   earthMoonCompositionForAltitude,
+  eclipticRollBlendForAltitude,
   journeyCompositionForSlider,
   wholeEarthFovDegForAspect,
 } from "../camera/camera-compositions";
@@ -80,6 +81,21 @@ describe("whole-Earth composition", () => {
     expect(journeyCompositionForSlider(0.36)).toBeCloseTo(0.34, 12);
     expect(journeyCompositionForSlider(0.6)).toBe(1);
     expect(journeyCompositionForSlider(1)).toBe(1);
+  });
+
+  it("re-levels screen-up onto the ecliptic only beyond the Earth-Moon band", () => {
+    expect(eclipticRollBlendForAltitude(2)).toBe(0);
+    expect(eclipticRollBlendForAltitude(20_000_000)).toBe(0);
+    expect(eclipticRollBlendForAltitude(500_000_000)).toBeLessThan(0.05);
+    expect(eclipticRollBlendForAltitude(400_000_000_000)).toBe(1);
+    expect(eclipticRollBlendForAltitude(8_000_000_000_000)).toBe(1);
+    // Monotonic through the transition band.
+    let previous = 0;
+    for (let exponent = 8.9; exponent <= 11.2; exponent += 0.1) {
+      const value = eclipticRollBlendForAltitude(10 ** exponent);
+      expect(value).toBeGreaterThanOrEqual(previous);
+      previous = value;
+    }
   });
 
   it("frames Earth and Moon together beyond whole Earth", () => {

@@ -64,3 +64,15 @@ landmarks — without enlarging any body.
 - Live Playwright CLI: full-system view shows all orbits obliquely with
   markers riding them; inner-system view centers the Sun with Mercury, Venus,
   and Mars on their rings; Neptune's inset reads 29.4 / 29.9 AU. 60 fps held.
+
+## Amendment (2026-07-12): ecliptic screen-up roll
+
+User feedback: the outward journey kept the observer's ground orientation as
+screen-up, so the solar system arrived tilted and the "I am standing on the
+side of a planet" realization never landed. The camera now rolls screen-up
+from the local zenith onto the J2000 ecliptic north across the band beyond
+Earth–Moon (log-altitude 8.9 → 11.2, `eclipticRollBlendForAltitude`): the
+system's plane settles flat on screen while the ground visibly tilts away.
+Implemented as a signed roll about the gaze axis applied to the base
+orientation; free-look offsets ride on top unchanged, and the blend is zero
+through every Phase 1–3 scale so earlier compositions are untouched.

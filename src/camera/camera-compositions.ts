@@ -97,6 +97,18 @@ export function systemCompositionForAltitude(
   return { blend, guidedYawRad, guidedPitchRad, fovDeg };
 }
 
+/**
+ * How strongly screen-up re-levels from the observer's zenith to ecliptic
+ * north on the outward journey (0 at Earth–Moon scale and below, 1 by the
+ * inner system). This roll is the "I was standing on the side of a planet"
+ * reveal: the solar system's plane settles flat while your ground tilts away.
+ */
+export function eclipticRollBlendForAltitude(altitudeM: number): number {
+  const logAltitude = Math.log10(Math.max(1, altitudeM));
+  const t = Math.min(1, Math.max(0, (logAltitude - 8.9) / (11.2 - 8.9)));
+  return t * t * (3 - 2 * t);
+}
+
 function lerp(start: number, end: number, amount: number): number {
   return start + (end - start) * amount;
 }

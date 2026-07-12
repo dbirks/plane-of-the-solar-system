@@ -9,11 +9,13 @@ import {
   rayToAltAzDeg,
 } from "../astronomy/moon-placement";
 import { computeMoonOrbitEqjM } from "../astronomy/moon-orbit";
+import { eclipticNorthEqj } from "../astronomy/planet-orbits";
 import { type BrightStar, chooseOpeningTarget } from "../astronomy/opening-target";
 import { computeSkyState, type SkyState } from "../astronomy/sky-state";
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
 import {
   earthMoonCompositionForAltitude,
+  eclipticRollBlendForAltitude,
   journeyCompositionForSlider,
   systemCompositionForAltitude,
   wholeEarthFovDegForAspect,
@@ -248,6 +250,7 @@ export class SpaceRenderer {
   private moonPlacement: MoonPlacement | null = null;
   private readonly sunDirectionLocal = new THREE.Vector3(0, 1, 0);
   private readonly sunDirectionUniform = uniform(new THREE.Vector3(0, 1, 0));
+  private readonly eclipticNorthLocal = new THREE.Vector3(0, 1, 0);
   private earthGuides: THREE.LineSegments | null = null;
   private slowFrameStreak = 0;
   private adaptiveDprCap = Number.POSITIVE_INFINITY;
@@ -485,6 +488,8 @@ export class SpaceRenderer {
     this.sunDirectionLocal.set(sunX, sunY, sunZ);
     this.sunDirectionUniform.value.set(sunX, sunY, sunZ);
     this.sunAltitudeDeg = sky.sun.altitudeDeg;
+    const eclipticNorthLocal = rotateEqjToLocal(sky.eqjToLocalThree, eclipticNorthEqj() as Vec3d);
+    this.eclipticNorthLocal.set(...eclipticNorthLocal);
 
     useAppStore.getState().setSkyReadout({
       sunAltitudeDeg: sky.sun.altitudeDeg,
@@ -713,6 +718,29 @@ export class SpaceRenderer {
     const baseQuaternion = new THREE.Quaternion()
       .setFromAxisAngle(new THREE.Vector3(0, 1, 0), baseYawRad)
       .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), basePitchRad));
+
+    // The reveal: screen-up rolls from the observer's zenith to ecliptic
+    // north on the way out, so the solar system's plane settles flat while
+    // your ground visibly tilts — you were standing on the side of a planet.
+    const rollBlend = eclipticRollBlendForAltitude(altitudeM);
+    if (rollBlend > 0.001) {
+      const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(baseQuaternion);
+      const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(baseQuaternion);
+      const desiredUp = this.eclipticNorthLocal
+        .clone()
+        .addScaledVector(gaze, -this.eclipticNorthLocal.dot(gaze));
+      if (desiredUp.lengthSq() > 1e-8) {
+        desiredUp.normalize();
+        const rollAngle = Math.atan2(
+          new THREE.Vector3().crossVectors(currentUp, desiredUp).dot(gaze),
+          currentUp.dot(desiredUp),
+        );
+        baseQuaternion.premultiply(
+          new THREE.Quaternion().setFromAxisAngle(gaze, rollAngle * rollBlend),
+        );
+      }
+    }
+
     const userQuaternion = new THREE.Quaternion()
       .setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yawOffset)
       .multiply(
