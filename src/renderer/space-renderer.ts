@@ -2,6 +2,7 @@ import * as THREE from "three/webgpu";
 
 import { useAppStore } from "../app/app-store";
 import type { FeatureFlags } from "../app/feature-flags";
+import { computeSkyState, type SkyState } from "../astronomy/sky-state";
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
 import {
   journeyCompositionForSlider,
@@ -17,6 +18,9 @@ import {
 } from "../camera/scale-domains";
 import { EARTH_MEAN_RADIUS_M } from "../coordinates/units";
 import { createContinentOutlines } from "../scene/earth/continent-outlines";
+import { SkyLayer } from "../scene/sky/sky-layer";
+import { STAR_COUNT } from "../scene/sky/star-catalog";
+import { SimulationClock } from "../simulation/simulation-clock";
 import { createRenderer } from "./renderer-factory";
 
 type SceneObjects = {
@@ -182,10 +186,16 @@ function createSceneObjects(
 export class SpaceRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly flags: FeatureFlags;
+  private readonly simulationClock: SimulationClock;
   private renderer: THREE.WebGPURenderer | null = null;
   private scene: THREE.Scene | null = null;
   private camera: THREE.PerspectiveCamera | null = null;
   private objects: SceneObjects | null = null;
+  private skyLayer: SkyLayer | null = null;
+  private skyState: SkyState | null = null;
+  private lastAstronomyUtcMs = Number.NEGATIVE_INFINITY;
+  private readonly sunDirectionLocal = new THREE.Vector3(0, 1, 0);
+  private sunAltitudeDeg = -90;
   private distanceSpring: SpringState = {
     value: Math.log(PHASE_ONE_MIN_DISTANCE_M),
     velocity: 0,
@@ -206,6 +216,7 @@ export class SpaceRenderer {
   constructor(canvas: HTMLCanvasElement, flags: FeatureFlags) {
     this.canvas = canvas;
     this.flags = flags;
+    this.simulationClock = new SimulationClock(flags.initialUtcMs);
   }
 
   async initialize(): Promise<void> {
@@ -220,6 +231,9 @@ export class SpaceRenderer {
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.00001, 5000);
     this.camera.position.set(0, 0, 0);
     this.objects = createSceneObjects(this.scene, this.flags.latitudeDeg, this.flags.longitudeDeg);
+    this.skyLayer = new SkyLayer();
+    this.scene.add(this.skyLayer.group);
+    this.updateAstronomy(this.simulationClock.read().utcMs);
 
     this.bindInput();
     this.resize();
@@ -229,6 +243,11 @@ export class SpaceRenderer {
       backend: bundle.backend,
     });
     this.renderer.setAnimationLoop((timeMs) => this.renderFrame(timeMs));
+  }
+
+  /** Latest astronomy snapshot; consumed by the marker overlay and opening target. */
+  get currentSkyState(): SkyState | null {
+    return this.skyState;
   }
 
   dispose(): void {
@@ -251,7 +270,8 @@ export class SpaceRenderer {
       const sensitivity = 0.004;
       this.yawOffset -= (event.clientX - this.lastPointer.x) * sensitivity;
       this.pitchOffset -= (event.clientY - this.lastPointer.y) * sensitivity;
-      this.pitchOffset = THREE.MathUtils.clamp(this.pitchOffset, -0.65, 0.65);
+      // Allow looking from just below the horizon all the way to the zenith.
+      this.pitchOffset = THREE.MathUtils.clamp(this.pitchOffset, -0.65, 1.52);
       this.lastPointer = { x: event.clientX, y: event.clientY };
     };
     const onPointerUp = (event: PointerEvent) => {
@@ -291,10 +311,33 @@ export class SpaceRenderer {
     const mobile = width < 760;
     const qualityCap =
       this.flags.quality === "low" ? 1 : mobile ? 1.5 : this.flags.quality === "high" ? 2 : 1.75;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, qualityCap));
+    const pixelRatio = Math.min(window.devicePixelRatio, qualityCap);
+    this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
+    this.skyLayer?.setSizeScale(pixelRatio);
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
+  }
+
+  /** Recompute the astronomy snapshot (~1 Hz) and publish the sky readout. */
+  private updateAstronomy(utcMs: number): void {
+    this.lastAstronomyUtcMs = utcMs;
+    const sky = computeSkyState(utcMs, this.flags.latitudeDeg, this.flags.longitudeDeg);
+    this.skyState = sky;
+    this.skyLayer?.updateAstronomy(sky);
+    const [sunX, sunY, sunZ] = sky.sun.directionLocalThree;
+    this.sunDirectionLocal.set(sunX, sunY, sunZ);
+    this.sunAltitudeDeg = sky.sun.altitudeDeg;
+
+    useAppStore.getState().setSkyReadout({
+      sunAltitudeDeg: sky.sun.altitudeDeg,
+      sunAzimuthDeg: sky.sun.azimuthDeg,
+      moonAltitudeDeg: sky.moon.altitudeDeg,
+      moonAzimuthDeg: sky.moon.azimuthDeg,
+      moonIlluminatedFraction: sky.moon.illuminatedFraction,
+      moonPhaseDeg: sky.moonPhaseDeg,
+      visibleStarCount: sky.sun.altitudeDeg < -3 ? STAR_COUNT : 0,
+    });
   }
 
   private renderFrame(timeMs: number): void {
@@ -303,6 +346,10 @@ export class SpaceRenderer {
     const rawDeltaSeconds = this.previousFrameMs ? (timeMs - this.previousFrameMs) / 1000 : 1 / 60;
     this.previousFrameMs = timeMs;
     const deltaSeconds = Math.min(0.05, rawDeltaSeconds);
+    const simulationUtcMs = this.simulationClock.read().utcMs;
+    if (Math.abs(simulationUtcMs - this.lastAstronomyUtcMs) >= 1000) {
+      this.updateAstronomy(simulationUtcMs);
+    }
     const appState = useAppStore.getState();
     const targetLogMeters = Math.log(appState.targetDistanceM);
     if (Math.abs(targetLogMeters - this.previousTargetLogMeters) > 0.0001) {
@@ -362,23 +409,31 @@ export class SpaceRenderer {
     markerMaterial.transparent = true;
     markerMaterial.opacity = markerReveal;
 
+    // Twilight state drives sky, atmosphere, and star visibility.
+    const daylight = smoothstep(-6, 8, this.sunAltitudeDeg);
+
     const atmosphereExit = smoothstep(45_000, 450_000, altitudeM);
     (this.objects.atmosphereInside.material as THREE.MeshBasicMaterial).opacity =
-      THREE.MathUtils.lerp(0.36, 0.15, atmosphereExit);
+      THREE.MathUtils.lerp(0.36, 0.15, atmosphereExit) * (0.18 + 0.82 * daylight);
     this.objects.atmosphereInside.visible = true;
     this.objects.atmosphereOutside.visible = false;
     this.objects.coordinateGrid.visible = false;
+    this.skyLayer?.updateAltitude(altitudeM, this.sunAltitudeDeg);
     const continentReveal = smoothstep(0.3, 0.82, normalizedScale);
     this.objects.continentOutlines.visible = continentReveal > 0.001;
     (this.objects.continentOutlines.material as THREE.LineBasicMaterial).opacity =
       0.04 + continentReveal * 0.28;
 
+    // Sunlight arrives from the true Sun direction; rays run parallel from
+    // position toward the earth-center target, so the terminator is physical.
+    const sunOffsetRender = earthRadiusRender * 4;
     this.objects.keyLight.position.set(
-      earthRadiusRender * 3,
-      earthCenterY + earthRadiusRender * 2,
-      earthRadiusRender * 2,
+      this.sunDirectionLocal.x * sunOffsetRender,
+      earthCenterY + this.sunDirectionLocal.y * sunOffsetRender,
+      this.sunDirectionLocal.z * sunOffsetRender,
     );
     this.objects.keyLight.target.position.set(0, earthCenterY, 0);
+    this.objects.fillLight.intensity = 0.22 + 0.63 * daylight;
 
     const composition = journeyCompositionForSlider(normalizedScale);
     const baseQuaternion = new THREE.Quaternion().setFromAxisAngle(
@@ -398,13 +453,14 @@ export class SpaceRenderer {
     );
     this.camera.updateProjectionMatrix();
 
-    const skyBrightness = 1 - smoothstep(1_000, 180_000, altitudeM);
+    // Sky brightness falls with altitude and with the Sun below the horizon.
+    const skyBrightness = (1 - smoothstep(1_000, 180_000, altitudeM)) * daylight;
     const sceneBackground = this.scene.background;
     if (sceneBackground instanceof THREE.Color) {
       sceneBackground.setRGB(
-        0.008 + 0.014 * skyBrightness,
-        0.021 + 0.07 * skyBrightness,
-        0.055 + 0.11 * skyBrightness,
+        0.005 + 0.017 * skyBrightness,
+        0.012 + 0.079 * skyBrightness,
+        0.028 + 0.137 * skyBrightness,
         THREE.SRGBColorSpace,
       );
     }
@@ -417,6 +473,7 @@ export class SpaceRenderer {
       altitudeM,
       renderUnitsPerMeter,
       capRadiusM,
+      simulationUtcMs,
     );
   }
 
@@ -426,6 +483,7 @@ export class SpaceRenderer {
     altitudeM: number,
     renderUnitsPerMeter: number,
     capRadiusM: number,
+    simulationUtcMs: number,
   ): void {
     if (!this.renderer) return;
     if (frameMs < 100) this.frameSamplesMs.push(frameMs);
@@ -459,6 +517,8 @@ export class SpaceRenderer {
       renderScale: renderUnitsPerMeter,
       estimatedJitterM,
       orientationOffsetDeg: THREE.MathUtils.radToDeg(Math.hypot(this.yawOffset, this.pitchOffset)),
+      headingDeg: ((-THREE.MathUtils.radToDeg(this.yawOffset) % 360) + 360) % 360,
+      simulationUtcMs,
     });
   }
 }

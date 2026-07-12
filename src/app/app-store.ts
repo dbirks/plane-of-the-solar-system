@@ -15,14 +15,30 @@ export type RendererTelemetry = {
   renderScale: number;
   estimatedJitterM: number;
   orientationOffsetDeg: number;
+  /** Camera compass heading at the ground: 0 north, 90 east. */
+  headingDeg: number;
+  simulationUtcMs: number;
+};
+
+/** Low-frequency (~1 Hz) astronomy readout published by the renderer. */
+export type SkyReadout = {
+  sunAltitudeDeg: number;
+  sunAzimuthDeg: number;
+  moonAltitudeDeg: number;
+  moonAzimuthDeg: number;
+  moonIlluminatedFraction: number;
+  moonPhaseDeg: number;
+  visibleStarCount: number;
 };
 
 type AppState = {
   targetDistanceM: number;
   telemetry: RendererTelemetry;
+  skyReadout: SkyReadout | null;
   reducedMotion: boolean;
   setTargetDistanceM: (distanceM: number) => void;
   setTelemetry: (telemetry: RendererTelemetry) => void;
+  setSkyReadout: (skyReadout: SkyReadout) => void;
   setReducedMotion: (enabled: boolean) => void;
 };
 
@@ -39,14 +55,18 @@ export const INITIAL_TELEMETRY: RendererTelemetry = {
   renderScale: 0,
   estimatedJitterM: 0,
   orientationOffsetDeg: 0,
+  headingDeg: 0,
+  simulationUtcMs: 0,
 };
 
 export const useAppStore = create<AppState>((set) => ({
   targetDistanceM: PHASE_ONE_MIN_DISTANCE_M,
   telemetry: INITIAL_TELEMETRY,
+  skyReadout: null,
   reducedMotion:
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   setTargetDistanceM: (targetDistanceM) => set({ targetDistanceM }),
   setTelemetry: (telemetry) => set({ telemetry }),
+  setSkyReadout: (skyReadout) => set({ skyReadout }),
   setReducedMotion: (reducedMotion) => set({ reducedMotion }),
 }));

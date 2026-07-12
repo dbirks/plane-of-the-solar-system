@@ -3,12 +3,18 @@ import type { FeatureFlags } from "../app/feature-flags";
 
 export function DebugPanel({ flags }: { flags: FeatureFlags }) {
   const telemetry = useAppStore((state) => state.telemetry);
+  const skyReadout = useAppStore((state) => state.skyReadout);
 
   if (!flags.debug) return null;
 
+  const timestampUtcMs = telemetry.simulationUtcMs || flags.initialUtcMs;
   const rows: Array<[string, string]> = [
-    ["Timestamp", new Date(flags.fixedTimeUtcMs).toISOString()],
+    [
+      "Timestamp",
+      `${new Date(timestampUtcMs).toISOString()}${flags.hasExplicitTime ? " (fixed)" : ""}`,
+    ],
     ["Observer", `${flags.latitudeDeg.toFixed(4)}, ${flags.longitudeDeg.toFixed(4)}`],
+    ["Heading", `${telemetry.headingDeg.toFixed(1)}°`],
     ["Renderer", telemetry.backend],
     ["Depth", flags.depth],
     ["Frame", `${telemetry.fps.toFixed(0)} fps · ${telemetry.averageFrameMs.toFixed(1)} ms avg`],
@@ -22,6 +28,24 @@ export function DebugPanel({ flags }: { flags: FeatureFlags }) {
     ["Quantization est.", `${telemetry.estimatedJitterM.toFixed(3)} m`],
     ["Orientation offset", `${telemetry.orientationOffsetDeg.toFixed(3)}°`],
   ];
+
+  if (skyReadout) {
+    rows.push(
+      [
+        "Sun",
+        `alt ${skyReadout.sunAltitudeDeg.toFixed(2)}° · az ${skyReadout.sunAzimuthDeg.toFixed(2)}°`,
+      ],
+      [
+        "Moon",
+        `alt ${skyReadout.moonAltitudeDeg.toFixed(2)}° · az ${skyReadout.moonAzimuthDeg.toFixed(2)}°`,
+      ],
+      [
+        "Moon phase",
+        `${skyReadout.moonPhaseDeg.toFixed(1)}° · ${(skyReadout.moonIlluminatedFraction * 100).toFixed(1)}% lit`,
+      ],
+      ["Catalog stars", String(skyReadout.visibleStarCount)],
+    );
+  }
 
   return (
     <aside className="debug-panel" aria-label="Renderer debug information">

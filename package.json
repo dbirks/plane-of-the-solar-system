@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "build:pages": "tsc -b && vite build --base=/plane-of-the-solar-system/",
+    "build": "pnpm typecheck && vite build",
+    "build:pages": "pnpm typecheck && vite build --base=/plane-of-the-solar-system/",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -14,7 +14,7 @@
     "lint": "oxlint --deny-warnings .",
     "format:check": "oxfmt --ignore-path=.oxfmtignore --check .",
     "format": "oxfmt --ignore-path=.oxfmtignore .",
-    "typecheck": "tsc -b",
+    "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc -b",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
@@ -34,7 +34,7 @@
     "@vitejs/plugin-react": "latest",
     "oxfmt": "latest",
     "oxlint": "latest",
-    "typescript": "latest",
+    "typescript": "~5.9.3",
     "vite": "latest",
     "vitest": "latest"
   },

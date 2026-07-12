@@ -7,7 +7,10 @@ export type FeatureFlags = {
   renderer: RendererPreference;
   depth: DepthPreference;
   quality: QualityPreference;
-  fixedTimeUtcMs: number;
+  /** Simulation start time: the ?time= parameter when given, otherwise now. */
+  initialUtcMs: number;
+  /** True when ?time= pinned the clock for reproducible captures. */
+  hasExplicitTime: boolean;
   latitudeDeg: number;
   longitudeDeg: number;
 };
@@ -24,14 +27,17 @@ export function readFeatureFlags(search = window.location.search): FeatureFlags 
   const depth = depthValue === "log" || depthValue === "standard" ? depthValue : "reversed";
   const qualityValue = params.get("quality");
   const quality = qualityValue === "low" || qualityValue === "high" ? qualityValue : "auto";
-  const parsedTime = Date.parse(params.get("time") ?? "2026-07-11T22:00:00Z");
+  const timeParam = params.get("time");
+  const parsedTime = timeParam === null ? Number.NaN : Date.parse(timeParam);
+  const hasExplicitTime = Number.isFinite(parsedTime);
 
   return {
     debug: params.get("debug") === "1",
     renderer,
     depth,
     quality,
-    fixedTimeUtcMs: Number.isNaN(parsedTime) ? Date.parse("2026-07-11T22:00:00Z") : parsedTime,
+    initialUtcMs: hasExplicitTime ? parsedTime : Date.now(),
+    hasExplicitTime,
     latitudeDeg: finiteQueryNumber(params, "lat", 39.7684),
     longitudeDeg: finiteQueryNumber(params, "lon", -86.1581),
   };
