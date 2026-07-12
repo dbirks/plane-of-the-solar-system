@@ -57,3 +57,12 @@ Frame intervals are browser animation intervals from the headless session, not C
 - GitHub Actions run `29145270094`: source checks, Pages artifact build/upload, and deployment pass.
 
 Screenshots are in `artifacts/screenshots/`, including clean ground, atmosphere, whole-Earth, mobile, debug, and deployed views.
+
+## Phase 2 addendum (2026-07-12)
+
+- Fixed verification scenario: `2026-07-24T02:30:00Z`, `39.7684, -86.1581` (Moon alt ≈ 22.4°, az ≈ 195.6°).
+- Astronomy accuracy: astronomy-engine cross-checked against an independent truncated-Meeus reference at four epochs across hemispheres — Sun within 0.3°, Moon within 0.5° and 1,500 km, illuminated fraction within 0.02; star-field EQJ path agrees with the per-body alt-az path within 0.1° (`src/tests/astronomy.test.ts`).
+- Live browser check: opening view faced the Moon at heading 195.6°, marker click returned the camera from heading 291.8° to the Moon, compass strip tracked heading, and the fixed scenario readouts matched the unit-test values.
+- Performance: 60 fps held with the sky layer active (2 draw calls day / ~7 night); the ~1 Hz astronomy tick costs 1–2 ms on its frame.
+- Fixed during Phase 2 verification: missing `?lat`/`?lon` previously resolved to (0°, 0°) instead of the documented fallback because `Number(null)` is 0 — Phase 1 astronomy-facing state actually described the Gulf of Guinea. Verified corrected via unit tests and live readouts.
+- Known limitations: Moon parallax from altitude travel is not applied to the sky-proxy Moon (Phase 3 introduces the physical Moon); native WebGPU still unmeasured on this host (no adapter in headless Chromium).

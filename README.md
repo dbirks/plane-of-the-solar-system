@@ -1,20 +1,23 @@
 # Plane of the Solar System
 
-An immersive precision prototype that begins about two meters above Earth and lets you pull continuously outward until the horizon becomes the limb of a whole planet.
+An immersive experience that begins about two meters above Earth under the real current sky, and lets you pull continuously outward until the horizon becomes the limb of a whole planet.
 
 **Live app:** [dbirks.github.io/plane-of-the-solar-system](https://dbirks.github.io/plane-of-the-solar-system/)
 
-The current `SPEC.md` task deliberately implements Phase 0 and Phase 1 only. Astronomy is not rejected: Sun, Moon, planets, and stars are explicitly planned for later phases, but the spec gates them on proving this ground-to-whole-Earth precision foundation first.
+Phases 0–2 of `SPEC.md` are implemented: the precision ground-to-whole-Earth journey and the real sky. The Earth–Moon system, full solar system, and experience polish (Phases 3–5) are next.
 
 ## What works
 
+- **The real sky for your place and moment**: the Sun, Moon, bright planets, and 2,865 catalog stars occupy their true directions, computed by astronomy-engine and cross-validated against an independent Meeus reference
+- The Moon shows its actual phase — the terminator is physical geometry lit by the true Sun direction, never a texture
+- A deterministic opening view: the camera greets you facing the Moon, the setting Sun, a bright planet, or a bright star
+- Screen-space markers with click-to-look for every bright body, ghosted below the horizon, edge-pinned when off-view
+- A live sliding compass, day/twilight/night sky driven by true Sun altitude, and stars that emerge through dusk
+- Offline location chain (URL → saved → timezone guess → fallback) with a picker for manual coordinates and opt-in device location — never a permission prompt on opening
 - Direct Three.js `WebGPURenderer` with automatic WebGL 2 fallback and forced-WebGL mode
-- Camera-relative rendering with canonical double-precision meter values
-- Smooth, damped piecewise-logarithmic travel through ground, atmosphere, low orbit, and whole Earth
-- Drag look, mouse wheel, touch-friendly vertical slider, landmark buttons, and keyboard slider operation
-- Near-surface precision representation, observer marker, basic atmosphere, responsive portrait composition, and reduced-motion option
-- Fixed time/location/debug controls and live precision/performance telemetry
-- Unit, browser, visual-capture, and GitHub Pages deployment workflows
+- Camera-relative rendering with canonical double-precision meter values; smooth, damped piecewise-logarithmic travel through ground, atmosphere, low orbit, and whole Earth
+- Fixed time/location/debug controls, live precision/performance telemetry, and reduced-motion support
+- 57 unit tests, 24 Playwright scenarios (desktop + mobile), and GitHub Pages deployment
 
 ## Run locally
 

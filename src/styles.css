@@ -255,7 +255,7 @@ input:focus-visible {
   font-size: 0.6rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  pointer-events: auto;
+  pointer-events: none;
   cursor: pointer;
   will-change: transform;
 }

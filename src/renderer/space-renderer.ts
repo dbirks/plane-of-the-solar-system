@@ -228,6 +228,8 @@ export class SpaceRenderer {
   private previousTargetLogMeters = Math.log(PHASE_ONE_MIN_DISTANCE_M);
   private pointerId: number | null = null;
   private lastPointer = { x: 0, y: 0 };
+  private pointerDownAt = { x: 0, y: 0, timeMs: 0 };
+  private pointerTravelPx = 0;
   private previousFrameMs = 0;
   private telemetryAtMs = 0;
   private frameSamplesMs: number[] = [];
@@ -315,6 +317,8 @@ export class SpaceRenderer {
       this.guidanceRequested = false;
       this.lookTarget = null;
       this.lastPointer = { x: event.clientX, y: event.clientY };
+      this.pointerDownAt = { x: event.clientX, y: event.clientY, timeMs: performance.now() };
+      this.pointerTravelPx = 0;
       this.canvas.setPointerCapture(event.pointerId);
       this.canvas.classList.add("is-dragging");
     };
@@ -325,12 +329,22 @@ export class SpaceRenderer {
       this.pitchOffset -= (event.clientY - this.lastPointer.y) * sensitivity;
       // Allow looking from just below the horizon all the way to the zenith.
       this.pitchOffset = THREE.MathUtils.clamp(this.pitchOffset, -0.65, 1.52);
+      this.pointerTravelPx += Math.hypot(
+        event.clientX - this.lastPointer.x,
+        event.clientY - this.lastPointer.y,
+      );
       this.lastPointer = { x: event.clientX, y: event.clientY };
     };
     const onPointerUp = (event: PointerEvent) => {
       if (event.pointerId !== this.pointerId) return;
       this.pointerId = null;
       this.canvas.classList.remove("is-dragging");
+      // Markers are pointer-transparent; a short, still press is a tap that
+      // may select one (drags never are).
+      const pressMs = performance.now() - this.pointerDownAt.timeMs;
+      if (this.pointerTravelPx < 7 && pressMs < 600) {
+        this.overlay?.handleTap(event.clientX, event.clientY);
+      }
     };
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();

@@ -12,7 +12,12 @@ export type LookHandler = (azimuthDeg: number, altitudeDeg: number) => void;
 type MarkerEntry = {
   element: HTMLButtonElement;
   body: SkyBodyState;
+  screenX: number;
+  screenY: number;
+  visible: boolean;
 };
+
+const TAP_RADIUS_PX = 26;
 
 const LAYER_FADE_START_ALTITUDE_M = 80_000;
 const LAYER_FADE_END_ALTITUDE_M = 400_000;
@@ -54,12 +59,15 @@ export class SkyOverlay {
         label.className = "sky-marker-label";
         label.textContent = body.label;
         element.append(ring, label);
+        // Markers are pointer-transparent so the canvas keeps drag and wheel
+        // everywhere; taps are routed back via bodyAt(). The click listener
+        // still serves keyboard activation (focus + Enter).
         element.addEventListener("click", () => {
           const current = this.markers.get(body.id);
           if (current) this.onLook(current.body.azimuthDeg, current.body.altitudeDeg);
         });
         this.layer.appendChild(element);
-        entry = { element, body };
+        entry = { element, body, screenX: -1, screenY: -1, visible: false };
         this.markers.set(body.id, entry);
       }
       entry.body = body;
@@ -123,6 +131,9 @@ export class SkyOverlay {
         entry.element.classList.toggle("sky-marker--edge", atEdge);
         const screenX = ((ndcX + 1) / 2) * width;
         const screenY = ((1 - ndcY) / 2) * height;
+        entry.screenX = screenX;
+        entry.screenY = screenY;
+        entry.visible = true;
         entry.element.style.transform = `translate(${screenX.toFixed(1)}px, ${screenY.toFixed(1)}px)`;
       }
     }
@@ -136,6 +147,32 @@ export class SkyOverlay {
       const offset = centerPx - (headingDeg + 180) * pxPerDeg;
       strip.style.transform = `translateX(${offset.toFixed(1)}px)`;
     }
+  }
+
+  /**
+   * Hit-test a canvas tap against the last projected marker positions.
+   * Returns true when the tap engaged a marker (and triggered the look-at).
+   */
+  handleTap(clientX: number, clientY: number): boolean {
+    if (this.layer.style.display === "none" || Number(this.layer.style.opacity || 1) < 0.2) {
+      return false;
+    }
+    const rect = this.root.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+    let best: MarkerEntry | null = null;
+    let bestDistance = TAP_RADIUS_PX;
+    for (const entry of this.markers.values()) {
+      if (!entry.visible) continue;
+      const distance = Math.hypot(entry.screenX - localX, entry.screenY - localY);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = entry;
+      }
+    }
+    if (!best) return false;
+    this.onLook(best.body.azimuthDeg, best.body.altitudeDeg);
+    return true;
   }
 
   dispose(): void {
