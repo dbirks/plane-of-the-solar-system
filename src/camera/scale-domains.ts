@@ -3,28 +3,30 @@ import { EARTH_MEAN_RADIUS_M, METERS_PER_AU } from "../coordinates/units";
 export type ScaleDomain = "local" | "earth-centered" | "heliocentric";
 
 export type ScaleLandmark = {
-  id: "ground" | "atmosphere" | "low-orbit" | "whole-earth";
+  id: "ground" | "atmosphere" | "low-orbit" | "whole-earth" | "earth-moon";
   label: string;
   distanceM: number;
   sliderT: number;
 };
 
-export const PHASE_ONE_MIN_DISTANCE_M = 2;
-export const PHASE_ONE_MAX_DISTANCE_M = 20_000_000;
+export const JOURNEY_MIN_DISTANCE_M = 2;
+export const JOURNEY_MAX_DISTANCE_M = 500_000_000;
 
-export const PHASE_ONE_LANDMARKS: readonly ScaleLandmark[] = [
+export const JOURNEY_LANDMARKS: readonly ScaleLandmark[] = [
   { id: "ground", label: "Ground", distanceM: 2, sliderT: 0 },
-  { id: "atmosphere", label: "Atmosphere", distanceM: 100_000, sliderT: 0.38 },
-  { id: "low-orbit", label: "Low orbit", distanceM: 500_000, sliderT: 0.58 },
-  { id: "whole-earth", label: "Whole Earth", distanceM: 20_000_000, sliderT: 1 },
+  { id: "atmosphere", label: "Atmosphere", distanceM: 100_000, sliderT: 0.3 },
+  { id: "low-orbit", label: "Low orbit", distanceM: 500_000, sliderT: 0.46 },
+  { id: "whole-earth", label: "Whole Earth", distanceM: 20_000_000, sliderT: 0.78 },
+  { id: "earth-moon", label: "Earth–Moon", distanceM: 500_000_000, sliderT: 1 },
 ];
 
 const JOURNEY_SCALE_ANCHORS = [
-  { sliderT: 0, distanceM: PHASE_ONE_MIN_DISTANCE_M },
-  { sliderT: 0.16, distanceM: 1_000 },
-  { sliderT: 0.38, distanceM: 100_000 },
-  { sliderT: 0.58, distanceM: 500_000 },
-  { sliderT: 1, distanceM: PHASE_ONE_MAX_DISTANCE_M },
+  { sliderT: 0, distanceM: JOURNEY_MIN_DISTANCE_M },
+  { sliderT: 0.13, distanceM: 1_000 },
+  { sliderT: 0.3, distanceM: 100_000 },
+  { sliderT: 0.46, distanceM: 500_000 },
+  { sliderT: 0.78, distanceM: 20_000_000 },
+  { sliderT: 1, distanceM: JOURNEY_MAX_DISTANCE_M },
 ] as const;
 
 export function sliderToDistance(normalizedValue: number): number {
@@ -41,10 +43,7 @@ export function sliderToDistance(normalizedValue: number): number {
 }
 
 export function distanceToSlider(distanceM: number): number {
-  const distance = Math.min(
-    PHASE_ONE_MAX_DISTANCE_M,
-    Math.max(PHASE_ONE_MIN_DISTANCE_M, distanceM),
-  );
+  const distance = Math.min(JOURNEY_MAX_DISTANCE_M, Math.max(JOURNEY_MIN_DISTANCE_M, distanceM));
   const upperIndex = JOURNEY_SCALE_ANCHORS.findIndex((anchor) => anchor.distanceM >= distance);
   if (upperIndex <= 0) return JOURNEY_SCALE_ANCHORS[0].sliderT;
 
@@ -60,7 +59,7 @@ export function applySoftLandmarkAttraction(normalizedValue: number): number {
   const radius = 0.018;
   let attracted = normalizedValue;
 
-  for (const landmark of PHASE_ONE_LANDMARKS) {
+  for (const landmark of JOURNEY_LANDMARKS) {
     const landmarkT = landmark.sliderT;
     const delta = landmarkT - attracted;
     const absoluteDelta = Math.abs(delta);

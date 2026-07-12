@@ -715,3 +715,79 @@ input:focus-visible {
   font-size: 0.68rem;
   line-height: 1.55;
 }
+
+.moon-inset {
+  position: absolute;
+  z-index: 7;
+  bottom: 110px;
+  left: 30px;
+  width: min(320px, calc(100vw - 40px));
+  padding: 16px 18px;
+  border: 1px solid rgb(157 207 210 / 0.2);
+  border-radius: 14px;
+  background: rgb(2 11 18 / 0.85);
+  box-shadow:
+    0 22px 70px rgb(0 0 0 / 0.3),
+    inset 0 1px 0 rgb(255 255 255 / 0.04);
+  backdrop-filter: blur(18px);
+}
+
+.moon-inset header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.moon-inset-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.moon-inset-body canvas {
+  flex-shrink: 0;
+  border-radius: 999px;
+  box-shadow: 0 0 24px rgb(233 230 220 / 0.12);
+}
+
+.moon-inset-body dl {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+}
+
+.moon-inset-body dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.moon-inset-body dt {
+  color: #9db8ba;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.moon-inset-body dd {
+  margin: 0;
+  color: #e8f2f2;
+  font-size: 0.8rem;
+}
+
+.moon-inset-note {
+  margin: 12px 0 0;
+  color: #8aa3a6;
+  font-size: 0.66rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .moon-inset {
+    bottom: 96px;
+    left: 16px;
+  }
+}

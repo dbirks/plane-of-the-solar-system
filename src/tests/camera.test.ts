@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { stepCriticalSpring } from "../camera/camera-spring";
 import {
+  earthMoonCompositionForAltitude,
   journeyCompositionForSlider,
   wholeEarthFovDegForAspect,
 } from "../camera/camera-compositions";
@@ -9,32 +10,33 @@ import { formatDistance } from "../camera/distance-format";
 import {
   applySoftLandmarkAttraction,
   distanceToSlider,
-  PHASE_ONE_LANDMARKS,
+  JOURNEY_LANDMARKS,
   sliderToDistance,
 } from "../camera/scale-domains";
 
 describe("logarithmic journey scale", () => {
   it("maps both endpoints exactly", () => {
     expect(sliderToDistance(0)).toBeCloseTo(2, 12);
-    expect(sliderToDistance(1)).toBeCloseTo(20_000_000, 5);
+    expect(sliderToDistance(1)).toBeCloseTo(500_000_000, 4);
   });
 
   it("round-trips values", () => {
-    for (const distanceM of [2, 100_000, 500_000, 20_000_000]) {
-      expect(sliderToDistance(distanceToSlider(distanceM))).toBeCloseTo(distanceM, 6);
+    for (const distanceM of [2, 100_000, 500_000, 20_000_000, 500_000_000]) {
+      expect(sliderToDistance(distanceToSlider(distanceM))).toBeCloseTo(distanceM, 5);
     }
   });
 
   it("uses perceptual logarithmic anchors for a responsive ascent", () => {
-    expect(distanceToSlider(1_000)).toBeCloseTo(0.16, 12);
-    expect(distanceToSlider(100_000)).toBeCloseTo(0.38, 12);
-    expect(distanceToSlider(500_000)).toBeCloseTo(0.58, 12);
-    expect(sliderToDistance(0.27)).toBeCloseTo(10_000, 6);
+    expect(distanceToSlider(1_000)).toBeCloseTo(0.13, 12);
+    expect(distanceToSlider(100_000)).toBeCloseTo(0.3, 12);
+    expect(distanceToSlider(500_000)).toBeCloseTo(0.46, 12);
+    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.78, 12);
+    expect(JOURNEY_LANDMARKS.at(-1)).toMatchObject({ id: "earth-moon", distanceM: 500_000_000 });
   });
 
   it("gently attracts near a landmark without trapping distant values", () => {
     const atmosphereT = distanceToSlider(
-      PHASE_ONE_LANDMARKS.find((item) => item.id === "atmosphere")!.distanceM,
+      JOURNEY_LANDMARKS.find((item) => item.id === "atmosphere")!.distanceM,
     );
     const near = atmosphereT + 0.01;
     expect(Math.abs(applySoftLandmarkAttraction(near) - atmosphereT)).toBeLessThan(
@@ -69,9 +71,22 @@ describe("whole-Earth composition", () => {
 
   it("keeps black space visible at the low-orbit landmark", () => {
     expect(journeyCompositionForSlider(0)).toBe(0);
-    expect(journeyCompositionForSlider(0.38)).toBeCloseTo(0.17, 12);
-    expect(journeyCompositionForSlider(0.58)).toBeCloseTo(0.34, 12);
+    expect(journeyCompositionForSlider(0.3)).toBeCloseTo(0.17, 12);
+    expect(journeyCompositionForSlider(0.46)).toBeCloseTo(0.34, 12);
+    expect(journeyCompositionForSlider(0.78)).toBe(1);
     expect(journeyCompositionForSlider(1)).toBe(1);
+  });
+
+  it("frames Earth and Moon together beyond whole Earth", () => {
+    const moonRay = [0.6, -0.35, -0.72] as const;
+    const nearWholeEarth = earthMoonCompositionForAltitude(20_000_000, moonRay, 46);
+    const atEarthMoon = earthMoonCompositionForAltitude(500_000_000, moonRay, 46);
+    expect(nearWholeEarth.blend).toBeLessThan(0.3);
+    expect(atEarthMoon.blend).toBe(1);
+    // Gaze lifts off the nadir toward the Moon and the FOV covers both.
+    expect(atEarthMoon.guidedPitchRad).toBeGreaterThan(-Math.PI / 2);
+    expect(atEarthMoon.fovDeg).toBeGreaterThanOrEqual(46);
+    expect(atEarthMoon.fovDeg).toBeLessThanOrEqual(92);
   });
 });
 
@@ -80,5 +95,6 @@ describe("distance readout", () => {
     expect(formatDistance(2)).toBe("Altitude · 2 m");
     expect(formatDistance(12_400)).toBe("Altitude · 12.4 km");
     expect(formatDistance(20_000_000)).toBe("Distance from Earth · 20,000 km");
+    expect(formatDistance(500_000_000)).toBe("Distance from Earth · 500,000 km");
   });
 });

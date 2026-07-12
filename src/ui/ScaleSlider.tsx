@@ -5,7 +5,7 @@ import { formatDistance } from "../camera/distance-format";
 import {
   applySoftLandmarkAttraction,
   distanceToSlider,
-  PHASE_ONE_LANDMARKS,
+  JOURNEY_LANDMARKS,
   sliderToDistance,
 } from "../camera/scale-domains";
 
@@ -16,7 +16,7 @@ export function ScaleSlider() {
   const normalizedTarget = distanceToSlider(targetDistanceM);
 
   const currentLandmark = useMemo(() => {
-    return PHASE_ONE_LANDMARKS.reduce((closest, candidate) =>
+    return JOURNEY_LANDMARKS.reduce((closest, candidate) =>
       Math.abs(Math.log(candidate.distanceM) - Math.log(currentDistanceM)) <
       Math.abs(Math.log(closest.distanceM) - Math.log(currentDistanceM))
         ? candidate
@@ -50,7 +50,7 @@ export function ScaleSlider() {
           onKeyUp={(event) => updateScale(Number(event.currentTarget.value), true)}
         />
         <div className="landmark-track" aria-hidden="true">
-          {PHASE_ONE_LANDMARKS.map((landmark) => (
+          {JOURNEY_LANDMARKS.map((landmark) => (
             <span
               className="landmark-notch"
               key={landmark.id}
@@ -59,7 +59,7 @@ export function ScaleSlider() {
           ))}
         </div>
         <div className="landmark-labels">
-          {PHASE_ONE_LANDMARKS.map((landmark) => (
+          {JOURNEY_LANDMARKS.map((landmark) => (
             <button
               key={landmark.id}
               type="button"

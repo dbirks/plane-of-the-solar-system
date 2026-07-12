@@ -5,9 +5,10 @@ const fixedScenario =
 
 const landmarks = [
   { name: "ground", sliderValue: "0", settleMs: 500 },
-  { name: "atmosphere", sliderValue: "0.38", settleMs: 2_500 },
-  { name: "low-orbit", sliderValue: "0.58", settleMs: 2_500 },
-  { name: "whole-earth", sliderValue: "1", settleMs: 3_500 },
+  { name: "atmosphere", sliderValue: "0.3", settleMs: 2_500 },
+  { name: "low-orbit", sliderValue: "0.46", settleMs: 2_500 },
+  { name: "whole-earth", sliderValue: "0.78", settleMs: 3_500 },
+  { name: "earth-moon", sliderValue: "1", settleMs: 4_000 },
 ] as const;
 
 test("captures fixed Phase 1 landmarks", async ({ page }, testInfo) => {

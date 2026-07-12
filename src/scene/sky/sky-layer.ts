@@ -19,6 +19,7 @@ import {
 } from "three/tsl";
 import * as THREE from "three/webgpu";
 
+import type { MoonPlacement } from "../../astronomy/moon-placement";
 import type { SkyBodyState, SkyState } from "../../astronomy/sky-state";
 import { STAR_COLOR_INDEX, STAR_COUNT, STAR_DEC_DEG, STAR_MAG, STAR_RA_DEG } from "./star-catalog";
 
@@ -164,10 +165,40 @@ export class SkyLayer {
   private readonly sunGlow: THREE.Sprite;
   private readonly moonMesh: THREE.Mesh;
   private readonly moonSunDirectionUniform = uniform(new THREE.Vector3(1, 0, 0));
+  private readonly moonOrbitGuide: THREE.LineSegments;
+  private readonly sunDirectionGuide: THREE.LineSegments;
 
   constructor() {
     this.starPoints = buildStarField(1);
     this.planetPoints = buildPlanetPoints(5, 1);
+
+    // Earth-anchored guides: geometry lives in EQJ meters (orbit) or local
+    // meters (sun ray); per frame they are positioned at the Earth's render
+    // center and uniformly scaled by render-units-per-meter. LineSegments,
+    // not LineLoop: the WebGPU-flavored renderer does not draw line loops.
+    const orbitMaterial = new THREE.LineBasicMaterial({
+      color: 0x9fd8dc,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    this.moonOrbitGuide = new THREE.LineSegments(new THREE.BufferGeometry(), orbitMaterial);
+    this.moonOrbitGuide.renderOrder = -4;
+    this.moonOrbitGuide.frustumCulled = false;
+    this.moonOrbitGuide.visible = false;
+
+    const sunGuideMaterial = new THREE.LineBasicMaterial({
+      color: 0xf5c977,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    const sunGuideGeometry = new THREE.BufferGeometry();
+    sunGuideGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
+    this.sunDirectionGuide = new THREE.LineSegments(sunGuideGeometry, sunGuideMaterial);
+    this.sunDirectionGuide.renderOrder = -4;
+    this.sunDirectionGuide.frustumCulled = false;
+    this.sunDirectionGuide.visible = false;
 
     const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xfff3dc });
     this.sunDisc = new THREE.Mesh(new THREE.CircleGeometry(1, 48), sunMaterial);
@@ -190,7 +221,15 @@ export class SkyLayer {
     this.moonMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), moonMaterial);
     this.moonMesh.renderOrder = -5;
 
-    this.group.add(this.starPoints, this.planetPoints, this.sunDisc, this.sunGlow, this.moonMesh);
+    this.group.add(
+      this.starPoints,
+      this.planetPoints,
+      this.sunDisc,
+      this.sunGlow,
+      this.moonMesh,
+      this.moonOrbitGuide,
+      this.sunDirectionGuide,
+    );
   }
 
   /** Point-size multiplier compensating for device pixel ratio. */
@@ -222,6 +261,8 @@ export class SkyLayer {
       1,
     );
     this.starPoints.quaternion.setFromRotationMatrix(rotation);
+    // The Moon orbit guide lives in EQJ meters; share the star rotation.
+    this.moonOrbitGuide.quaternion.copy(this.starPoints.quaternion);
 
     this.placeBody(this.sunDisc, sky.sun);
     const sunGlowDistance = BODY_SHELL_RENDER_RADIUS * 0.98;
@@ -229,8 +270,23 @@ export class SkyLayer {
     const glowScale = sunGlowDistance * Math.tan(8 * DEG);
     this.sunGlow.scale.setScalar(glowScale);
 
-    this.placeBody(this.moonMesh, sky.moon);
+    // The Moon mesh itself is placed per frame from the current altitude
+    // (computeMoonPlacement); here only its lighting direction refreshes.
     this.moonSunDirectionUniform.value.set(...sky.sun.directionLocalThree);
+
+    const sunGuidePositions = this.sunDirectionGuide.geometry.getAttribute(
+      "position",
+    ) as THREE.BufferAttribute;
+    const [sunX, sunY, sunZ] = sky.sun.directionLocalThree;
+    const sunGuideLengthM = 60_000_000;
+    sunGuidePositions.setXYZ(0, 0, 0, 0);
+    sunGuidePositions.setXYZ(
+      1,
+      sunX * sunGuideLengthM,
+      sunY * sunGuideLengthM,
+      sunZ * sunGuideLengthM,
+    );
+    sunGuidePositions.needsUpdate = true;
 
     // Planets: positions, brightness, and warm/cool tints by magnitude.
     const positionAttribute = this.planetPoints.geometry.getAttribute(
@@ -276,6 +332,54 @@ export class SkyLayer {
     this.setPointsOpacity(this.starPoints, starOpacity);
     const groundPlanetOpacity = clamp01((-sunAltitudeDeg + 1) / 8);
     this.setPointsOpacity(this.planetPoints, Math.max(groundPlanetOpacity, spaceFactor * 0.9));
+  }
+
+  /** Per-frame Moon mesh placement (proxy shell near ground, physical beyond). */
+  updateMoonPlacement(placement: MoonPlacement): void {
+    const [x, y, z] = placement.rayLocal;
+    this.moonMesh.position.set(
+      x * placement.renderDistance,
+      y * placement.renderDistance,
+      z * placement.renderDistance,
+    );
+    this.moonMesh.scale.setScalar(Math.max(1e-7, placement.renderRadius));
+  }
+
+  /** Replace the Moon orbit guide geometry (EQJ meters, flattened xyz). */
+  setMoonOrbitGeometry(pointsEqjM: Float32Array): void {
+    // Expand the closed path into segment pairs for LineSegments, and swap in
+    // a fresh geometry (the WebGPU renderer caches attribute layouts).
+    const sampleCount = pointsEqjM.length / 3;
+    const segments = new Float32Array(sampleCount * 6);
+    for (let i = 0; i < sampleCount; i += 1) {
+      const next = (i + 1) % sampleCount;
+      segments[i * 6] = pointsEqjM[i * 3]!;
+      segments[i * 6 + 1] = pointsEqjM[i * 3 + 1]!;
+      segments[i * 6 + 2] = pointsEqjM[i * 3 + 2]!;
+      segments[i * 6 + 3] = pointsEqjM[next * 3]!;
+      segments[i * 6 + 4] = pointsEqjM[next * 3 + 1]!;
+      segments[i * 6 + 5] = pointsEqjM[next * 3 + 2]!;
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(segments, 3));
+    const previous = this.moonOrbitGuide.geometry;
+    this.moonOrbitGuide.geometry = geometry;
+    previous.dispose();
+  }
+
+  /** Per-frame Earth-anchored guide placement and system-scale fades. */
+  updateEarthAnchored(
+    earthCenterRenderY: number,
+    renderUnitsPerMeter: number,
+    altitudeM: number,
+  ): void {
+    const reveal = smoothstepNumber(4_000_000, 30_000_000, altitudeM);
+    for (const guide of [this.moonOrbitGuide, this.sunDirectionGuide]) {
+      guide.position.set(0, earthCenterRenderY, 0);
+      guide.scale.setScalar(renderUnitsPerMeter);
+      guide.visible = reveal > 0.003;
+      (guide.material as THREE.LineBasicMaterial).opacity = reveal * 0.4;
+    }
   }
 
   private setPointsOpacity(points: THREE.Points, value: number): void {

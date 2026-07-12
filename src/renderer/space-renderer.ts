@@ -2,17 +2,24 @@ import * as THREE from "three/webgpu";
 
 import { useAppStore } from "../app/app-store";
 import type { FeatureFlags } from "../app/feature-flags";
+import {
+  computeMoonPlacement,
+  type MoonPlacement,
+  rayToAltAzDeg,
+} from "../astronomy/moon-placement";
+import { computeMoonOrbitEqjM } from "../astronomy/moon-orbit";
 import { type BrightStar, chooseOpeningTarget } from "../astronomy/opening-target";
 import { computeSkyState, type SkyState } from "../astronomy/sky-state";
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
 import {
+  earthMoonCompositionForAltitude,
   journeyCompositionForSlider,
   wholeEarthFovDegForAspect,
 } from "../camera/camera-compositions";
 import {
   distanceToSlider,
   earthRenderRadiusForAltitude,
-  PHASE_ONE_MIN_DISTANCE_M,
+  JOURNEY_MIN_DISTANCE_M,
   renderUnitsPerMeterForAltitude,
   scaleDomainForDistance,
   sliderToDistance,
@@ -216,16 +223,18 @@ export class SpaceRenderer {
   private readonly overlayRoot: HTMLElement | null;
   private lookTarget: { azimuthDeg: number; altitudeDeg: number } | null = null;
   private lastAstronomyUtcMs = Number.NEGATIVE_INFINITY;
+  private lastOrbitUtcMs = Number.NEGATIVE_INFINITY;
+  private moonPlacement: MoonPlacement | null = null;
   private readonly sunDirectionLocal = new THREE.Vector3(0, 1, 0);
   private sunAltitudeDeg = -90;
   private distanceSpring: SpringState = {
-    value: Math.log(PHASE_ONE_MIN_DISTANCE_M),
+    value: Math.log(JOURNEY_MIN_DISTANCE_M),
     velocity: 0,
   };
   private yawOffset = 0;
   private pitchOffset = 0;
   private guidanceRequested = false;
-  private previousTargetLogMeters = Math.log(PHASE_ONE_MIN_DISTANCE_M);
+  private previousTargetLogMeters = Math.log(JOURNEY_MIN_DISTANCE_M);
   private pointerId: number | null = null;
   private lastPointer = { x: 0, y: 0 };
   private pointerDownAt = { x: 0, y: 0, timeMs: 0 };
@@ -265,9 +274,10 @@ export class SpaceRenderer {
     this.skyLayer = new SkyLayer();
     this.scene.add(this.skyLayer.group);
     if (this.overlayRoot) {
-      this.overlay = new SkyOverlay(this.overlayRoot, (azimuthDeg, altitudeDeg) =>
-        this.lookToward(azimuthDeg, altitudeDeg),
-      );
+      this.overlay = new SkyOverlay(this.overlayRoot, {
+        onLook: (azimuthDeg, altitudeDeg) => this.lookToward(azimuthDeg, altitudeDeg),
+        onSelect: (bodyId) => useAppStore.getState().setSelectedBodyId(bodyId),
+      });
     }
     this.updateAstronomy(this.simulationClock.read().utcMs);
     this.applyOpeningTarget();
@@ -393,6 +403,12 @@ export class SpaceRenderer {
     this.skyState = sky;
     this.skyLayer?.updateAstronomy(sky);
     this.overlay?.setSky(sky);
+
+    // The orbit guide is stable in EQJ; refresh only when hours stale.
+    if (Math.abs(utcMs - this.lastOrbitUtcMs) > 6 * 3_600_000) {
+      this.lastOrbitUtcMs = utcMs;
+      this.skyLayer?.setMoonOrbitGeometry(computeMoonOrbitEqjM(utcMs));
+    }
     const [sunX, sunY, sunZ] = sky.sun.directionLocalThree;
     this.sunDirectionLocal.set(sunX, sunY, sunZ);
     this.sunAltitudeDeg = sky.sun.altitudeDeg;
@@ -404,6 +420,7 @@ export class SpaceRenderer {
       moonAzimuthDeg: sky.moon.azimuthDeg,
       moonIlluminatedFraction: sky.moon.illuminatedFraction,
       moonPhaseDeg: sky.moonPhaseDeg,
+      moonDistanceM: sky.moon.distanceM,
       visibleStarCount: sky.sun.altitudeDeg < -3 ? STAR_COUNT : 0,
     });
   }
@@ -503,15 +520,51 @@ export class SpaceRenderer {
     this.objects.keyLight.target.position.set(0, earthCenterY, 0);
     this.objects.fillLight.intensity = 0.22 + 0.63 * daylight;
 
+    // Physical Moon: same ray as the sky proxy, true scaled distance once it
+    // fits inside the far plane — the hand-off is continuous by construction.
+    if (this.skyState) {
+      this.moonPlacement = computeMoonPlacement(
+        this.skyState.moon.directionLocalThree,
+        this.skyState.moon.distanceM,
+        altitudeM,
+        renderUnitsPerMeter,
+      );
+      this.skyLayer?.updateMoonPlacement(this.moonPlacement);
+    }
+    this.skyLayer?.updateEarthAnchored(earthCenterY, renderUnitsPerMeter, altitudeM);
+
     const composition = journeyCompositionForSlider(normalizedScale);
+
+    // Base gaze: nadir progression through the journey, blending into the
+    // Earth–Moon framing beyond whole Earth so both bodies share the frame.
+    let basePitchRad = (-Math.PI / 2) * composition;
+    let baseYawRad = 0;
+    let baseFovDeg = THREE.MathUtils.lerp(
+      58,
+      wholeEarthFovDegForAspect(this.camera.aspect),
+      composition,
+    );
+    if (this.moonPlacement) {
+      const framing = earthMoonCompositionForAltitude(
+        altitudeM,
+        this.moonPlacement.rayLocal,
+        baseFovDeg,
+      );
+      if (framing.blend > 0) {
+        basePitchRad = THREE.MathUtils.lerp(basePitchRad, framing.guidedPitchRad, framing.blend);
+        baseYawRad = framing.guidedYawRad * framing.blend;
+        baseFovDeg = THREE.MathUtils.lerp(baseFovDeg, framing.fovDeg, framing.blend);
+      }
+    }
 
     // Marker-click look-at: ease the free-look offsets toward the body.
     if (this.lookTarget && this.pointerId === null) {
-      const targetYaw = -THREE.MathUtils.degToRad(this.lookTarget.azimuthDeg);
-      const basePitch = (-Math.PI / 2) * composition;
+      const targetYaw = wrapAngleRad(
+        -THREE.MathUtils.degToRad(this.lookTarget.azimuthDeg) - baseYawRad,
+      );
       const targetPitch = THREE.MathUtils.clamp(
         THREE.MathUtils.degToRad(Math.min(60, Math.max(4, this.lookTarget.altitudeDeg))) -
-          basePitch,
+          basePitchRad,
         -0.65,
         1.52,
       );
@@ -525,21 +578,16 @@ export class SpaceRenderer {
       }
     }
 
-    const baseQuaternion = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(1, 0, 0),
-      (-Math.PI / 2) * composition,
-    );
+    const baseQuaternion = new THREE.Quaternion()
+      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), baseYawRad)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), basePitchRad));
     const userQuaternion = new THREE.Quaternion()
       .setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yawOffset)
       .multiply(
         new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pitchOffset),
       );
     this.camera.quaternion.copy(baseQuaternion).multiply(userQuaternion);
-    this.camera.fov = THREE.MathUtils.lerp(
-      58,
-      wholeEarthFovDegForAspect(this.camera.aspect),
-      composition,
-    );
+    this.camera.fov = baseFovDeg;
     this.camera.updateProjectionMatrix();
 
     // Sky brightness falls with altitude and with the Sun below the horizon.
@@ -555,8 +603,15 @@ export class SpaceRenderer {
     }
 
     this.renderer.render(this.scene, this.camera);
-    const headingDeg = ((-THREE.MathUtils.radToDeg(this.yawOffset) % 360) + 360) % 360;
-    this.overlay?.update(this.camera, headingDeg, altitudeM);
+    const headingDeg = ((-THREE.MathUtils.radToDeg(baseYawRad + this.yawOffset) % 360) + 360) % 360;
+    const moonOverride = this.moonPlacement
+      ? {
+          directionLocalThree: this.moonPlacement.rayLocal,
+          ...rayToAltAzDeg(this.moonPlacement.rayLocal),
+          physical: this.moonPlacement.physical,
+        }
+      : undefined;
+    this.overlay?.update(this.camera, headingDeg, altitudeM, moonOverride);
     this.framesSinceTelemetry += 1;
     this.collectTelemetry(
       timeMs,
@@ -565,6 +620,7 @@ export class SpaceRenderer {
       renderUnitsPerMeter,
       capRadiusM,
       simulationUtcMs,
+      headingDeg,
     );
   }
 
@@ -575,6 +631,7 @@ export class SpaceRenderer {
     renderUnitsPerMeter: number,
     capRadiusM: number,
     simulationUtcMs: number,
+    headingDeg: number,
   ): void {
     if (!this.renderer) return;
     if (frameMs < 100) this.frameSamplesMs.push(frameMs);
@@ -608,7 +665,7 @@ export class SpaceRenderer {
       renderScale: renderUnitsPerMeter,
       estimatedJitterM,
       orientationOffsetDeg: THREE.MathUtils.radToDeg(Math.hypot(this.yawOffset, this.pitchOffset)),
-      headingDeg: ((-THREE.MathUtils.radToDeg(this.yawOffset) % 360) + 360) % 360,
+      headingDeg,
       simulationUtcMs,
     });
   }

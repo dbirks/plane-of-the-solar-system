@@ -66,3 +66,10 @@ Screenshots are in `artifacts/screenshots/`, including clean ground, atmosphere,
 - Performance: 60 fps held with the sky layer active (2 draw calls day / ~7 night); the ~1 Hz astronomy tick costs 1–2 ms on its frame.
 - Fixed during Phase 2 verification: missing `?lat`/`?lon` previously resolved to (0°, 0°) instead of the documented fallback because `Number(null)` is 0 — Phase 1 astronomy-facing state actually described the Gulf of Guinea. Verified corrected via unit tests and live readouts.
 - Known limitations: Moon parallax from altitude travel is not applied to the sky-proxy Moon (Phase 3 introduces the physical Moon); native WebGPU still unmeasured on this host (no adapter in headless Chromium).
+
+## Phase 3 addendum (2026-07-12)
+
+- The journey now ends at the Earth–Moon landmark (5×10⁸ m). At that scale the render step per Float32 quantum stays far below a pixel (render scale 3.375×10⁻⁷ units/m; Earth ≈ 171 units from camera).
+- Moon placement is continuous across the proxy→physical hand-off: unit tests bound the direction change at the boundary below 1e-5 rad and the angular-size change below 1e-5 rad, and the physical regime round-trips `renderDistance / scale` to the true camera distance to four decimals.
+- Live check at the Earth–Moon landmark: Earth and Moon share the frame at true scale, the orbit guide (one sidereal month of GeoMoon samples) passes through the Moon, the sunlight guide leaves Earth's lit side, and the inset reports the same phase/fraction as the debug readout. 60 fps held.
+- Found during Phase 3: `THREE.LineLoop` silently does not render on the WebGPU-flavored renderer (WebGL 2 backend); guides use `LineSegments` (ADR-0007).

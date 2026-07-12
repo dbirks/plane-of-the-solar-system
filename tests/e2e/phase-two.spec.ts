@@ -125,11 +125,16 @@ test("location panel offers manual and device location without any opening promp
   await expect(debugValue(page, "Observer")).toHaveText("-33.8700, 151.2100");
 });
 
-test("markers fade out on the journey to whole Earth", async ({ page }) => {
+test("sky-proxy markers fade on the journey while the physical Moon's persists", async ({
+  page,
+}) => {
   await page.goto(moonScenario);
-  await page.getByRole("slider", { name: "Distance from the ground" }).fill("1");
-  const layer = page.locator(".sky-marker-layer");
+  await page.getByRole("slider", { name: "Distance from the ground" }).fill("0.78");
+  const sunMarker = page.locator(".sky-marker[data-body=sun]");
   await expect
-    .poll(async () => layer.evaluate((element) => element.style.display), { timeout: 15_000 })
+    .poll(async () => sunMarker.evaluate((element) => element.style.display), {
+      timeout: 15_000,
+    })
     .toBe("none");
+  await expect(page.locator(".sky-marker[data-body=moon]")).toBeVisible();
 });

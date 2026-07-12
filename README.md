@@ -4,7 +4,7 @@ An immersive experience that begins about two meters above Earth under the real 
 
 **Live app:** [dbirks.github.io/plane-of-the-solar-system](https://dbirks.github.io/plane-of-the-solar-system/)
 
-Phases 0–2 of `SPEC.md` are implemented: the precision ground-to-whole-Earth journey and the real sky. The Earth–Moon system, full solar system, and experience polish (Phases 3–5) are next.
+Phases 0–3 of `SPEC.md` are implemented: the precision ground-to-whole-Earth journey, the real sky, and the Earth–Moon system at true scale. The full solar system and experience polish (Phases 4–5) are next.
 
 ## What works
 
@@ -13,11 +13,13 @@ Phases 0–2 of `SPEC.md` are implemented: the precision ground-to-whole-Earth j
 - A deterministic opening view: the camera greets you facing the Moon, the setting Sun, a bright planet, or a bright star
 - Screen-space markers with click-to-look for every bright body, ghosted below the horizon, edge-pinned when off-view
 - A live sliding compass, day/twilight/night sky driven by true Sun altitude, and stars that emerge through dusk
+- Keep pulling out to the **Earth–Moon landmark at 500,000 km**: the physical Moon at true, uncompressed distance, its real orbit traced around Earth, and a sunlight-direction guide — with a jump-free hand-off from the sky view
+- Click the Moon for an inspection inset: phase disc, phase name, illuminated fraction, and distance, always matching the scene geometry
 - Offline location chain (URL → saved → timezone guess → fallback) with a picker for manual coordinates and opt-in device location — never a permission prompt on opening
 - Direct Three.js `WebGPURenderer` with automatic WebGL 2 fallback and forced-WebGL mode
 - Camera-relative rendering with canonical double-precision meter values; smooth, damped piecewise-logarithmic travel through ground, atmosphere, low orbit, and whole Earth
 - Fixed time/location/debug controls, live precision/performance telemetry, and reduced-motion support
-- 57 unit tests, 24 Playwright scenarios (desktop + mobile), and GitHub Pages deployment
+- 67 unit tests, 30 Playwright scenarios (desktop + mobile), and GitHub Pages deployment
 
 ## Run locally
 

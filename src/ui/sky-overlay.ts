@@ -1,17 +1,31 @@
 import * as THREE from "three/webgpu";
 
-import type { SkyBodyState, SkyState } from "../astronomy/sky-state";
+import type { SkyBodyId, SkyBodyState, SkyState } from "../astronomy/sky-state";
+import type { Vec3d } from "../coordinates/vec3d";
 
 /**
  * Screen-space marker and compass overlay. The renderer drives this directly
  * every frame (React renders none of it), matching the architecture rule that
  * markers are UI projected from scene state, never scene objects.
  */
-export type LookHandler = (azimuthDeg: number, altitudeDeg: number) => void;
+export type SkyOverlayHandlers = {
+  onLook: (azimuthDeg: number, altitudeDeg: number) => void;
+  onSelect: (bodyId: SkyBodyId) => void;
+};
+
+/** Live Moon placement injected per frame (the Moon leaves the sky proxy). */
+export type MoonMarkerOverride = {
+  directionLocalThree: Vec3d;
+  altitudeDeg: number;
+  azimuthDeg: number;
+  physical: boolean;
+};
 
 type MarkerEntry = {
   element: HTMLButtonElement;
   body: SkyBodyState;
+  lookAltitudeDeg: number;
+  lookAzimuthDeg: number;
   screenX: number;
   screenY: number;
   visible: boolean;
@@ -19,8 +33,10 @@ type MarkerEntry = {
 
 const TAP_RADIUS_PX = 26;
 
-const LAYER_FADE_START_ALTITUDE_M = 80_000;
-const LAYER_FADE_END_ALTITUDE_M = 400_000;
+// Sky-proxy markers fade on ascent; the Moon's marker persists because the
+// Moon itself is physical (SPEC Phase 3: the marker remains selectable).
+const PROXY_FADE_START_ALTITUDE_M = 80_000;
+const PROXY_FADE_END_ALTITUDE_M = 400_000;
 
 function smoothstepNumber(edge0: number, edge1: number, value: number): number {
   const t = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
@@ -31,12 +47,12 @@ export class SkyOverlay {
   private readonly root: HTMLElement;
   private readonly layer: HTMLDivElement;
   private readonly markers = new Map<string, MarkerEntry>();
-  private readonly onLook: LookHandler;
+  private readonly handlers: SkyOverlayHandlers;
   private readonly workVector = new THREE.Vector3();
 
-  constructor(root: HTMLElement, onLook: LookHandler) {
+  constructor(root: HTMLElement, handlers: SkyOverlayHandlers) {
     this.root = root;
-    this.onLook = onLook;
+    this.handlers = handlers;
     this.layer = document.createElement("div");
     this.layer.className = "sky-marker-layer";
     this.layer.setAttribute("aria-label", "Sky object markers");
@@ -60,17 +76,27 @@ export class SkyOverlay {
         label.textContent = body.label;
         element.append(ring, label);
         // Markers are pointer-transparent so the canvas keeps drag and wheel
-        // everywhere; taps are routed back via bodyAt(). The click listener
+        // everywhere; taps are routed back via handleTap(). The click listener
         // still serves keyboard activation (focus + Enter).
         element.addEventListener("click", () => {
           const current = this.markers.get(body.id);
-          if (current) this.onLook(current.body.azimuthDeg, current.body.altitudeDeg);
+          if (current) this.activate(current);
         });
         this.layer.appendChild(element);
-        entry = { element, body, screenX: -1, screenY: -1, visible: false };
+        entry = {
+          element,
+          body,
+          lookAltitudeDeg: body.altitudeDeg,
+          lookAzimuthDeg: body.azimuthDeg,
+          screenX: -1,
+          screenY: -1,
+          visible: false,
+        };
         this.markers.set(body.id, entry);
       }
       entry.body = body;
+      entry.lookAltitudeDeg = body.altitudeDeg;
+      entry.lookAzimuthDeg = body.azimuthDeg;
       const below = body.altitudeDeg < 0;
       entry.element.classList.toggle("sky-marker--ghost", below);
       entry.element.setAttribute(
@@ -83,22 +109,37 @@ export class SkyOverlay {
   }
 
   /** Per-frame: project markers and slide the compass strip. */
-  update(camera: THREE.PerspectiveCamera, headingDeg: number, altitudeM: number): void {
-    const layerOpacity =
-      1 - smoothstepNumber(LAYER_FADE_START_ALTITUDE_M, LAYER_FADE_END_ALTITUDE_M, altitudeM);
-    this.layer.style.opacity = layerOpacity.toFixed(3);
-    this.layer.style.pointerEvents = layerOpacity < 0.2 ? "none" : "";
-    if (layerOpacity <= 0.003) {
-      if (this.layer.style.display !== "none") this.layer.style.display = "none";
-    } else if (this.layer.style.display === "none") {
-      this.layer.style.display = "";
-    }
+  update(
+    camera: THREE.PerspectiveCamera,
+    headingDeg: number,
+    altitudeM: number,
+    moonOverride?: MoonMarkerOverride,
+  ): void {
+    const proxyOpacity =
+      1 - smoothstepNumber(PROXY_FADE_START_ALTITUDE_M, PROXY_FADE_END_ALTITUDE_M, altitudeM);
 
     const width = this.root.clientWidth;
     const height = this.root.clientHeight;
-    if (layerOpacity > 0.003 && width > 0 && height > 0) {
+    if (width > 0 && height > 0) {
       for (const entry of this.markers.values()) {
-        const [x, y, z] = entry.body.directionLocalThree;
+        const isMoon = entry.body.id === "moon";
+        const opacity = isMoon ? 1 : proxyOpacity;
+        if (opacity <= 0.02) {
+          entry.visible = false;
+          if (entry.element.style.display !== "none") entry.element.style.display = "none";
+          continue;
+        }
+        entry.element.style.opacity = opacity.toFixed(3);
+
+        let direction = entry.body.directionLocalThree;
+        if (isMoon && moonOverride) {
+          direction = moonOverride.directionLocalThree;
+          entry.lookAltitudeDeg = moonOverride.altitudeDeg;
+          entry.lookAzimuthDeg = moonOverride.azimuthDeg;
+          if (moonOverride.physical) entry.element.classList.remove("sky-marker--ghost");
+        }
+
+        const [x, y, z] = direction;
         // View space first: points behind the camera mirror through the
         // projection, so handle view-space z before projecting.
         this.workVector.set(x, y, z).applyMatrix4(camera.matrixWorldInverse);
@@ -151,12 +192,9 @@ export class SkyOverlay {
 
   /**
    * Hit-test a canvas tap against the last projected marker positions.
-   * Returns true when the tap engaged a marker (and triggered the look-at).
+   * Returns true when the tap engaged a marker.
    */
   handleTap(clientX: number, clientY: number): boolean {
-    if (this.layer.style.display === "none" || Number(this.layer.style.opacity || 1) < 0.2) {
-      return false;
-    }
     const rect = this.root.getBoundingClientRect();
     const localX = clientX - rect.left;
     const localY = clientY - rect.top;
@@ -171,8 +209,13 @@ export class SkyOverlay {
       }
     }
     if (!best) return false;
-    this.onLook(best.body.azimuthDeg, best.body.altitudeDeg);
+    this.activate(best);
     return true;
+  }
+
+  private activate(entry: MarkerEntry): void {
+    this.handlers.onLook(entry.lookAzimuthDeg, entry.lookAltitudeDeg);
+    this.handlers.onSelect(entry.body.id);
   }
 
   dispose(): void {

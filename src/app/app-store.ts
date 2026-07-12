@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
-import { PHASE_ONE_MIN_DISTANCE_M } from "../camera/scale-domains";
+import type { SkyBodyId } from "../astronomy/sky-state";
+import { JOURNEY_MIN_DISTANCE_M } from "../camera/scale-domains";
 
 export type RendererTelemetry = {
   backend: string;
@@ -28,6 +29,7 @@ export type SkyReadout = {
   moonAzimuthDeg: number;
   moonIlluminatedFraction: number;
   moonPhaseDeg: number;
+  moonDistanceM: number;
   visibleStarCount: number;
 };
 
@@ -36,17 +38,19 @@ type AppState = {
   telemetry: RendererTelemetry;
   skyReadout: SkyReadout | null;
   openingTargetLabel: string | null;
+  selectedBodyId: SkyBodyId | null;
   reducedMotion: boolean;
   setTargetDistanceM: (distanceM: number) => void;
   setTelemetry: (telemetry: RendererTelemetry) => void;
   setSkyReadout: (skyReadout: SkyReadout) => void;
   setOpeningTargetLabel: (label: string) => void;
+  setSelectedBodyId: (bodyId: SkyBodyId | null) => void;
   setReducedMotion: (enabled: boolean) => void;
 };
 
 export const INITIAL_TELEMETRY: RendererTelemetry = {
   backend: "Initializing…",
-  currentDistanceM: PHASE_ONE_MIN_DISTANCE_M,
+  currentDistanceM: JOURNEY_MIN_DISTANCE_M,
   scaleDomain: "local",
   fps: 0,
   averageFrameMs: 0,
@@ -62,15 +66,17 @@ export const INITIAL_TELEMETRY: RendererTelemetry = {
 };
 
 export const useAppStore = create<AppState>((set) => ({
-  targetDistanceM: PHASE_ONE_MIN_DISTANCE_M,
+  targetDistanceM: JOURNEY_MIN_DISTANCE_M,
   telemetry: INITIAL_TELEMETRY,
   skyReadout: null,
   openingTargetLabel: null,
+  selectedBodyId: null,
   reducedMotion:
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   setTargetDistanceM: (targetDistanceM) => set({ targetDistanceM }),
   setTelemetry: (telemetry) => set({ telemetry }),
   setSkyReadout: (skyReadout) => set({ skyReadout }),
   setOpeningTargetLabel: (openingTargetLabel) => set({ openingTargetLabel }),
+  setSelectedBodyId: (selectedBodyId) => set({ selectedBodyId }),
   setReducedMotion: (reducedMotion) => set({ reducedMotion }),
 }));

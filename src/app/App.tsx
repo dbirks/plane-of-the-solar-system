@@ -5,6 +5,7 @@ import { resolveObserverLocation } from "../location/observer-location";
 import { SpaceRenderer } from "../renderer/space-renderer";
 import { CompassRibbon } from "../ui/CompassRibbon";
 import { DebugPanel } from "../ui/DebugPanel";
+import { MoonInset } from "../ui/MoonInset";
 import { ObserverChip } from "../ui/ObserverChip";
 import { ScaleSlider } from "../ui/ScaleSlider";
 import { useAppStore } from "./app-store";
@@ -62,6 +63,7 @@ export function App() {
 
       <CompassRibbon />
       <ScaleSlider />
+      <MoonInset />
       <DebugPanel flags={flags} />
 
       {showHelp && (
