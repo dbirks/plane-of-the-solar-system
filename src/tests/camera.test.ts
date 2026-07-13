@@ -83,15 +83,20 @@ describe("whole-Earth composition", () => {
     expect(journeyCompositionForSlider(1)).toBe(1);
   });
 
-  it("re-levels screen-up onto the ecliptic only beyond the Earth-Moon band", () => {
+  it("re-levels screen-up onto the ecliptic between the atmosphere and Earth-Moon", () => {
     expect(eclipticRollBlendForAltitude(2)).toBe(0);
-    expect(eclipticRollBlendForAltitude(20_000_000)).toBe(0);
-    expect(eclipticRollBlendForAltitude(500_000_000)).toBeLessThan(0.05);
-    expect(eclipticRollBlendForAltitude(400_000_000_000)).toBe(1);
+    expect(eclipticRollBlendForAltitude(100_000)).toBe(0);
+    // Turning through low orbit and whole Earth…
+    expect(eclipticRollBlendForAltitude(500_000)).toBeGreaterThan(0.05);
+    expect(eclipticRollBlendForAltitude(500_000)).toBeLessThan(0.25);
+    expect(eclipticRollBlendForAltitude(20_000_000)).toBeGreaterThan(0.5);
+    expect(eclipticRollBlendForAltitude(20_000_000)).toBeLessThan(0.9);
+    // …and already flat when the Earth–Moon system frames up.
+    expect(eclipticRollBlendForAltitude(500_000_000)).toBe(1);
     expect(eclipticRollBlendForAltitude(8_000_000_000_000)).toBe(1);
     // Monotonic through the transition band.
     let previous = 0;
-    for (let exponent = 8.9; exponent <= 11.2; exponent += 0.1) {
+    for (let exponent = 5; exponent <= 8.7; exponent += 0.1) {
       const value = eclipticRollBlendForAltitude(10 ** exponent);
       expect(value).toBeGreaterThanOrEqual(previous);
       previous = value;

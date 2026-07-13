@@ -70,9 +70,16 @@ landmarks — without enlarging any body.
 User feedback: the outward journey kept the observer's ground orientation as
 screen-up, so the solar system arrived tilted and the "I am standing on the
 side of a planet" realization never landed. The camera now rolls screen-up
-from the local zenith onto the J2000 ecliptic north across the band beyond
-Earth–Moon (log-altitude 8.9 → 11.2, `eclipticRollBlendForAltitude`): the
-system's plane settles flat on screen while the ground visibly tilts away.
-Implemented as a signed roll about the gaze axis applied to the base
-orientation; free-look offsets ride on top unchanged, and the blend is zero
-through every Phase 1–3 scale so earlier compositions are untouched.
+from the local zenith onto the J2000 ecliptic north, implemented as a signed
+roll about the gaze axis applied to the base orientation; free-look offsets
+ride on top unchanged (and already unwind during scale travel), so the
+arrival orientation is repeatable regardless of where the user was looking.
+
+Retuned after live feedback: the original band (log-altitude 8.9 → 11.2,
+beyond Earth–Moon) fired so late that the whole ascent still felt locked to
+the ground frame and the Earth–Moon view arrived on a steep diagonal. The
+band is now log-altitude 5 → 8.69 (`eclipticRollBlendForAltitude`): the roll
+begins as the atmosphere gives way to space, turns the world smoothly through
+low orbit and whole Earth, and is complete at the Earth–Moon landmark — the
+Moon's orbit and everything beyond assemble on an already-flat plane. The
+blend stays zero at ground scale, so the opening sky is untouched.

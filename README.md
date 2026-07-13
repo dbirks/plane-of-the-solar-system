@@ -16,7 +16,7 @@ All six phases of `SPEC.md` (0–5) are implemented: the precision ground-to-who
 - Keep pulling out to the **Earth–Moon landmark at 500,000 km**: the physical Moon at true, uncompressed distance, its real orbit traced around Earth, and a sunlight-direction guide — with a jump-free hand-off from the sky view
 - Click the Moon for an inspection inset: phase disc, phase name, illuminated fraction, and distance, always matching the scene geometry
 - Continue out to the **inner system (2.7 AU)** and the **full solar system (53 AU)**: every planet to Pluto at its true current position and radius, riding precomputed orbit lines, with faint ecliptic rings making the plane of the solar system visible
-- On the way out, the view **rolls from your local "up" onto the plane of the solar system** — the ecliptic settles flat on screen while your ground tilts away, revealing that you were standing on the side of a planet
+- On the way out, the view **rolls from your local "up" onto the plane of the solar system** — starting as the atmosphere gives way to space and complete by the Earth–Moon landmark, the ecliptic settles flat on screen while your ground tilts away, revealing that you were standing on the side of a planet
 - Select any body's marker for distances and magnitude; nothing is ever enlarged — markers carry the discoverability
 - **NASA Blue Marble** Earth with **Black Marble city lights** on the physically-lit night side (async-loaded, ~1.1 MB, attributed)
 - A Layers panel for optional explanation geometry: orbits, ecliptic rings, Moon orbit, sunlight direction, Earth axis & equator, sky grid, labels — sparse by default
@@ -67,9 +67,9 @@ pnpx @playwright/cli@latest screenshot
 
 ## Screenshots
 
-| Ground                                              | Atmosphere                                                  | Low orbit                                                 | Whole Earth                                                   |
-| --------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
-| ![Ground](artifacts/screenshots/desktop-ground.png) | ![Atmosphere](artifacts/screenshots/desktop-atmosphere.png) | ![Low orbit](artifacts/screenshots/desktop-low-orbit.png) | ![Whole Earth](artifacts/screenshots/desktop-whole-earth.png) |
+| Ground                                              | Atmosphere                                                  | Low orbit                                                 | Whole Earth                                                   | Earth–Moon                                                  |
+| --------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------ |
+| ![Ground](artifacts/screenshots/desktop-ground.png) | ![Atmosphere](artifacts/screenshots/desktop-atmosphere.png) | ![Low orbit](artifacts/screenshots/desktop-low-orbit.png) | ![Whole Earth](artifacts/screenshots/desktop-whole-earth.png) | ![Earth–Moon](artifacts/screenshots/desktop-earth-moon.png) |
 
 Mobile captures and debug evidence are also available in [`artifacts/screenshots/`](artifacts/screenshots/).
 

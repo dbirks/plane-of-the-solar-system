@@ -49,10 +49,10 @@ test("the Moon's marker remains selectable at system scale and opens the inset",
   const moonMarker = page.locator(".sky-marker[data-body=moon]");
   await expect(moonMarker).toBeVisible();
   await expect(moonMarker).not.toHaveClass(/sky-marker--ghost/);
-  const markerBox = await moonMarker.boundingBox();
-  expect(markerBox).not.toBeNull();
-  if (!markerBox) return;
-  await page.mouse.click(markerBox.x + markerBox.width / 2, markerBox.y + 9);
+  // With the ecliptic roll the Moon can sit near the bottom edge, under the
+  // debug telemetry card on portrait — activate via the keyboard path.
+  await moonMarker.focus();
+  await page.keyboard.press("Enter");
 
   const inset = page.getByRole("complementary", { name: "Moon inspection" });
   await expect(inset).toBeVisible();
