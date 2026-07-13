@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  computeEarthOrbitEqjM,
   computeEclipticRingEqjM,
   computePlanetOrbitEqjM,
   eclipticNorthEqj,
@@ -80,6 +81,22 @@ describe("heliocentric solar system (frame: EQJ, units: meters)", () => {
         expect(radiusAu, planetId).toBeGreaterThan(low * 0.99);
         expect(radiusAu, planetId).toBeLessThan(high * 1.01);
       }
+    }
+  });
+
+  it("Earth's orbit line stays near 1 AU and near the ecliptic", () => {
+    const points = computeEarthOrbitEqjM(FIXED_UTC_MS, 48);
+    const north = eclipticNorthEqj();
+    for (let i = 0; i < points.length / 3; i += 1) {
+      const x = points[i * 3]!;
+      const y = points[i * 3 + 1]!;
+      const z = points[i * 3 + 2]!;
+      const radiusAu = Math.hypot(x, y, z) / METERS_PER_AU;
+      expect(radiusAu).toBeGreaterThan(0.975);
+      expect(radiusAu).toBeLessThan(1.02);
+      // Earth defines the ecliptic to well under a degree.
+      const latitudeSin = (x * north[0] + y * north[1] + z * north[2]) / (radiusAu * METERS_PER_AU);
+      expect(Math.abs(latitudeSin)).toBeLessThan(Math.sin((0.1 * Math.PI) / 180));
     }
   });
 

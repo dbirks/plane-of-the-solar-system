@@ -34,6 +34,22 @@ describe("debug feature flags", () => {
     });
   });
 
+  it("resolves miles for miles-country locales, kilometres elsewhere", () => {
+    expect(readFeatureFlags("?debug=1", ["en-US"]).distanceUnit).toBe("mi");
+    expect(readFeatureFlags("?debug=1", ["en-GB"]).distanceUnit).toBe("mi");
+    expect(readFeatureFlags("?debug=1", ["de-DE"]).distanceUnit).toBe("km");
+    expect(readFeatureFlags("?debug=1", ["fr"]).distanceUnit).toBe("km");
+    // Bare "en" maximizes to en-US.
+    expect(readFeatureFlags("?debug=1", ["en"]).distanceUnit).toBe("mi");
+    expect(readFeatureFlags("?debug=1", []).distanceUnit).toBe("km");
+  });
+
+  it("lets ?units= override the locale", () => {
+    expect(readFeatureFlags("?units=km", ["en-US"]).distanceUnit).toBe("km");
+    expect(readFeatureFlags("?units=mi", ["de-DE"]).distanceUnit).toBe("mi");
+    expect(readFeatureFlags("?units=bogus", ["de-DE"]).distanceUnit).toBe("km");
+  });
+
   it("defaults to the live current time when no ?time= is given", () => {
     const before = Date.now();
     const flags = readFeatureFlags("?debug=1");

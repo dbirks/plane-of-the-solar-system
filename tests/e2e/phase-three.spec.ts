@@ -20,7 +20,8 @@ test("journey extends to the Earth-Moon landmark at true distance", async ({ pag
   await page.getByRole("button", { name: "Earth–Moon" }).click();
   await expect(page.getByRole("slider", { name: "Distance from the ground" })).toHaveAttribute(
     "aria-valuetext",
-    "Distance from Earth · 500,000 km",
+    // Headless Chromium reports en-US, so the readout is region-detected miles.
+    "Distance from Earth · 310,686 mi",
   );
   await expect
     .poll(
@@ -59,7 +60,7 @@ test("the Moon's marker remains selectable at system scale and opens the inset",
   // The inset derives from the same SkyState as the scene geometry.
   await expect(inset.getByTestId("moon-phase-name")).toHaveText("Waxing gibbous");
   await expect(inset.getByText(/74\.\d%/)).toBeVisible();
-  await expect(inset.getByText(/\d{3},\d{3} km/)).toBeVisible();
+  await expect(inset.getByText(/\d{3},\d{3} mi/)).toBeVisible();
 
   await page.getByRole("button", { name: "Close Moon inspection" }).click();
   await expect(inset).not.toBeVisible();

@@ -1,6 +1,7 @@
 import * as THREE from "three/webgpu";
 
 import {
+  computeEarthOrbitEqjM,
   computeEclipticRingEqjM,
   computePlanetOrbitEqjM,
   PLANET_IDS,
@@ -120,7 +121,7 @@ export class SolarSystemLayer {
     this.group.visible = false;
   }
 
-  /** Build orbit lines once (≈1500 astronomy samples; ~a frame's budget). */
+  /** Build orbit lines once (≈1700 astronomy samples; ~a frame's budget). */
   buildOrbits(utcMs: number): void {
     if (this.orbitsBuilt) return;
     this.orbitsBuilt = true;
@@ -134,6 +135,16 @@ export class SolarSystemLayer {
       this.fadeLines.push(orbit);
       this.helioGroup.add(orbit);
     }
+    // Earth's own year — the observer's path — slightly brighter and warmer
+    // so "this is the line I travel" stands out from the planet orbits.
+    const earthOrbit = buildLineSegments(
+      closedPathToSegments(computeEarthOrbitEqjM(utcMs)),
+      0x9ec8ff,
+      0.32,
+    );
+    earthOrbit.userData["kind"] = "orbit";
+    this.fadeLines.push(earthOrbit);
+    this.helioGroup.add(earthOrbit);
   }
 
   /** Apply an astronomy snapshot: orientation, Earth offset, planet positions and radii. */

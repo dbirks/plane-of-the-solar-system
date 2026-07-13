@@ -587,7 +587,9 @@ export class SpaceRenderer {
     this.objects.localCap.visible = localFade > 0.001;
     (this.objects.localCap.material as THREE.MeshStandardMaterial).opacity = localFade;
 
-    const markerReveal = smoothstep(20_000, 800_000, altitudeM);
+    // The observer's dot appears as soon as the gaze starts sweeping down —
+    // "that is where I am standing" anchors the rest of the pull-out.
+    const markerReveal = smoothstep(1_500, 30_000, altitudeM);
     const markerDistanceRender = altitudeM * renderUnitsPerMeter;
     const markerSize = Math.max(0.002, markerDistanceRender * 0.006);
     this.objects.observerMarker.position.set(0, -altitudeM * renderUnitsPerMeter, 0);
@@ -610,7 +612,12 @@ export class SpaceRenderer {
     // The physical heliocentric layer takes over from the sky proxies as the
     // journey approaches interplanetary scale.
     const systemReveal = smoothstep(1e9, 8e9, altitudeM);
-    this.skyLayer?.updateAltitude(altitudeM, this.sunAltitudeDeg, systemReveal);
+    this.skyLayer?.updateAltitude(
+      altitudeM,
+      this.sunAltitudeDeg,
+      systemReveal,
+      layers["ecliptic-rings"],
+    );
     if (systemReveal > 0 && this.solarLayer) {
       this.solarLayer.buildOrbits(simulationUtcMs);
     }
@@ -652,10 +659,11 @@ export class SpaceRenderer {
 
     const composition = journeyCompositionForSlider(normalizedScale);
 
-    // Base gaze: nadir progression through the journey, blending into the
-    // Earth–Moon framing beyond whole Earth so both bodies share the frame.
-    let basePitchRad = (-Math.PI / 2) * composition;
-    let baseYawRad = 0;
+    // Base gaze: sweep to nadir by the atmosphere landmark and stay pinned on
+    // Earth for the rest of the journey — the Moon and then the whole system
+    // enter the frame purely by the FOV widening, so the pull-out never spins.
+    const basePitchRad = (-Math.PI / 2) * composition;
+    const baseYawRad = 0;
     let baseFovDeg = THREE.MathUtils.lerp(
       58,
       wholeEarthFovDegForAspect(this.camera.aspect),
@@ -668,30 +676,32 @@ export class SpaceRenderer {
         baseFovDeg,
       );
       if (framing.blend > 0) {
-        basePitchRad = THREE.MathUtils.lerp(basePitchRad, framing.guidedPitchRad, framing.blend);
-        baseYawRad = framing.guidedYawRad * framing.blend;
         baseFovDeg = THREE.MathUtils.lerp(baseFovDeg, framing.fovDeg, framing.blend);
       }
     }
-    if (this.skyState) {
-      const sunGeoLocalM = this.bodyGeoLocalM.get("sun");
-      if (sunGeoLocalM) {
-        const sunRay = this.rayFromGeoLocal(sunGeoLocalM, altitudeM);
-        const framing = systemCompositionForAltitude(altitudeM, sunRay, baseFovDeg);
-        if (framing.blend > 0) {
-          basePitchRad = THREE.MathUtils.lerp(basePitchRad, framing.guidedPitchRad, framing.blend);
-          baseYawRad = baseYawRad + wrapAngleRad(framing.guidedYawRad - baseYawRad) * framing.blend;
-          baseFovDeg = THREE.MathUtils.lerp(baseFovDeg, framing.fovDeg, framing.blend);
-        }
+    {
+      const framing = systemCompositionForAltitude(altitudeM, baseFovDeg);
+      if (framing.blend > 0) {
+        baseFovDeg = THREE.MathUtils.lerp(baseFovDeg, framing.fovDeg, framing.blend);
       }
     }
 
-    // Compass mode: near the ground, ease the view onto the device heading.
+    // Phone look: near the ground, ease the view onto where the device
+    // physically points — heading always, pitch when the platform reports it.
     const compassHeadingDeg = appState.compassHeadingDeg;
     if (compassHeadingDeg !== null && this.pointerId === null && altitudeM < 200_000) {
       const targetYaw = wrapAngleRad(-THREE.MathUtils.degToRad(compassHeadingDeg) - baseYawRad);
       const ease = 1 - Math.exp(-4 * deltaSeconds);
       this.yawOffset += wrapAngleRad(targetYaw - this.yawOffset) * ease;
+      const compassPitchDeg = appState.compassPitchDeg;
+      if (compassPitchDeg !== null) {
+        const targetPitch = THREE.MathUtils.clamp(
+          THREE.MathUtils.degToRad(compassPitchDeg) - basePitchRad,
+          -0.65,
+          1.52,
+        );
+        this.pitchOffset += (targetPitch - this.pitchOffset) * ease;
+      }
     }
 
     // Marker-click look-at: ease the free-look offsets toward the body.

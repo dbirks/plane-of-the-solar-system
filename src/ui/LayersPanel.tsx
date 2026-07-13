@@ -4,7 +4,7 @@ import { type LayerId, useAppStore } from "../app/app-store";
 
 const LAYER_LABELS: ReadonlyArray<[LayerId, string]> = [
   ["orbit-lines", "Planet orbits"],
-  ["ecliptic-rings", "Ecliptic plane rings"],
+  ["ecliptic-rings", "Ecliptic plane"],
   ["moon-orbit", "Moon orbit"],
   ["sun-guide", "Sunlight direction"],
   ["earth-axis", "Earth axis & equator"],

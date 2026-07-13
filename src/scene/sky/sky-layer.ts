@@ -20,6 +20,7 @@ import {
 import * as THREE from "three/webgpu";
 
 import type { MoonPlacement } from "../../astronomy/moon-placement";
+import { computeEclipticRingEqjM } from "../../astronomy/planet-orbits";
 import type { SkyBodyState, SkyState } from "../../astronomy/sky-state";
 import { STAR_COLOR_INDEX, STAR_COUNT, STAR_DEC_DEG, STAR_MAG, STAR_RA_DEG } from "./star-catalog";
 
@@ -167,10 +168,48 @@ export class SkyLayer {
   private readonly moonSunDirectionUniform = uniform(new THREE.Vector3(1, 0, 0));
   private readonly moonOrbitGuide: THREE.LineSegments;
   private readonly sunDirectionGuide: THREE.LineSegments;
+  private readonly eclipticBand: THREE.LineSegments;
 
   constructor() {
     this.starPoints = buildStarField(1);
     this.planetPoints = buildPlanetPoints(8, 1);
+
+    // The plane of the solar system, drawn on the sky itself: the ecliptic as
+    // a subtle great circle on the star shell. From the ground it is the arc
+    // the Sun, Moon, and planets all ride — the first hint of the flat plane
+    // the journey later reveals.
+    const eclipticDirections = computeEclipticRingEqjM(1, 180);
+    const bandRadius = STAR_SHELL_RENDER_RADIUS * 0.98;
+    const bandPath = new Float32Array(eclipticDirections.length);
+    for (let i = 0; i < eclipticDirections.length / 3; i += 1) {
+      const x = eclipticDirections[i * 3]!;
+      const y = eclipticDirections[i * 3 + 1]!;
+      const z = eclipticDirections[i * 3 + 2]!;
+      const length = Math.hypot(x, y, z) || 1;
+      bandPath[i * 3] = (x / length) * bandRadius;
+      bandPath[i * 3 + 1] = (y / length) * bandRadius;
+      bandPath[i * 3 + 2] = (z / length) * bandRadius;
+    }
+    const bandSegments = new Float32Array((bandPath.length / 3) * 6);
+    for (let i = 0; i < bandPath.length / 3; i += 1) {
+      const next = (i + 1) % (bandPath.length / 3);
+      bandSegments.set(bandPath.subarray(i * 3, i * 3 + 3), i * 6);
+      bandSegments.set(bandPath.subarray(next * 3, next * 3 + 3), i * 6 + 3);
+    }
+    const bandGeometry = new THREE.BufferGeometry();
+    bandGeometry.setAttribute("position", new THREE.BufferAttribute(bandSegments, 3));
+    this.eclipticBand = new THREE.LineSegments(
+      bandGeometry,
+      new THREE.LineBasicMaterial({
+        color: 0x7fb4b8,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      }),
+    );
+    this.eclipticBand.renderOrder = -4;
+    this.eclipticBand.frustumCulled = false;
+    this.eclipticBand.visible = false;
 
     // Earth-anchored guides: geometry lives in EQJ meters (orbit) or local
     // meters (sun ray); per frame they are positioned at the Earth's render
@@ -229,6 +268,7 @@ export class SkyLayer {
       this.moonMesh,
       this.moonOrbitGuide,
       this.sunDirectionGuide,
+      this.eclipticBand,
     );
   }
 
@@ -261,8 +301,9 @@ export class SkyLayer {
       1,
     );
     this.starPoints.quaternion.setFromRotationMatrix(rotation);
-    // The Moon orbit guide lives in EQJ meters; share the star rotation.
+    // The Moon orbit guide and ecliptic band live in EQJ; share the rotation.
     this.moonOrbitGuide.quaternion.copy(this.starPoints.quaternion);
+    this.eclipticBand.quaternion.copy(this.starPoints.quaternion);
 
     this.placeBody(this.sunDisc, sky.sun);
     const sunGlowDistance = BODY_SHELL_RENDER_RADIUS * 0.98;
@@ -327,8 +368,19 @@ export class SkyLayer {
    * `systemReveal` fades the sky-proxy Sun and planet points out as the
    * physical heliocentric layer takes over.
    */
-  updateAltitude(altitudeM: number, sunAltitudeDeg: number, systemReveal = 0): void {
+  updateAltitude(
+    altitudeM: number,
+    sunAltitudeDeg: number,
+    systemReveal = 0,
+    eclipticBandEnabled = true,
+  ): void {
     const spaceFactor = smoothstepNumber(40_000, 400_000, altitudeM);
+
+    // The sky-shell ecliptic hands off to the heliocentric rings and orbit
+    // lines as the physical system fades in.
+    const bandOpacity = eclipticBandEnabled ? 0.14 * (1 - systemReveal) : 0;
+    this.eclipticBand.visible = bandOpacity > 0.003;
+    (this.eclipticBand.material as THREE.LineBasicMaterial).opacity = bandOpacity;
     const groundStarOpacity = clamp01((-sunAltitudeDeg - 3) / 11);
     const starOpacity = Math.max(groundStarOpacity, spaceFactor * 0.85);
     this.setPointsOpacity(this.starPoints, starOpacity);
@@ -389,15 +441,20 @@ export class SkyLayer {
     gates: { moonOrbit: boolean; sunGuide: boolean },
   ): void {
     const reveal = smoothstepNumber(4_000_000, 30_000_000, altitudeM);
-    const guideStates: ReadonlyArray<[THREE.LineSegments, boolean]> = [
-      [this.moonOrbitGuide, gates.moonOrbit],
-      [this.sunDirectionGuide, gates.sunGuide],
+    // The short sunlight-direction pointer retires once the physical Sun and
+    // Earth's actual orbit line take over — a truncated ray at system scale
+    // reads as a broken orbit, not a light direction.
+    const sunGuideFade = 1 - smoothstepNumber(1e9, 6e9, altitudeM);
+    const guideStates: ReadonlyArray<[THREE.LineSegments, boolean, number]> = [
+      [this.moonOrbitGuide, gates.moonOrbit, 1],
+      [this.sunDirectionGuide, gates.sunGuide, sunGuideFade],
     ];
-    for (const [guide, enabled] of guideStates) {
+    for (const [guide, enabled, fade] of guideStates) {
       guide.position.set(0, earthCenterRenderY, 0);
       guide.scale.setScalar(renderUnitsPerMeter);
-      guide.visible = enabled && reveal > 0.003;
-      (guide.material as THREE.LineBasicMaterial).opacity = reveal * 0.4;
+      const opacity = reveal * fade * 0.4;
+      guide.visible = enabled && opacity > 0.003;
+      (guide.material as THREE.LineBasicMaterial).opacity = opacity;
     }
   }
 

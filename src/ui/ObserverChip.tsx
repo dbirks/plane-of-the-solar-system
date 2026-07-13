@@ -37,19 +37,19 @@ export function ObserverChip({
   const [savedFlash, setSavedFlash] = useState(false);
   const [compassActive, setCompassActive] = useState(false);
   const compassStopRef = useRef<CompassStop | null>(null);
-  const setCompassHeadingDeg = useAppStore((state) => state.setCompassHeadingDeg);
+  const setCompassLook = useAppStore((state) => state.setCompassLook);
 
   const toggleCompass = async () => {
     if (compassActive) {
       compassStopRef.current?.();
       compassStopRef.current = null;
-      setCompassHeadingDeg(null);
+      setCompassLook(null, null);
       setCompassActive(false);
       return;
     }
-    const stop = await startCompass((headingDeg) => setCompassHeadingDeg(headingDeg));
+    const stop = await startCompass((look) => setCompassLook(look.headingDeg, look.pitchDeg));
     if (!stop) {
-      setGeoStatus("Compass alignment is not available on this device or was declined.");
+      setGeoStatus("Device orientation is not available on this device or was declined.");
       return;
     }
     compassStopRef.current = stop;
@@ -155,7 +155,7 @@ export function ObserverChip({
             </button>
             {compassSupported() && (
               <button type="button" className="quiet-button" onClick={() => void toggleCompass()}>
-                {compassActive ? "Compass on" : "Align with compass"}
+                {compassActive ? "Phone look on" : "Point with phone"}
               </button>
             )}
             <button type="button" className="quiet-button" onClick={saveDefault}>

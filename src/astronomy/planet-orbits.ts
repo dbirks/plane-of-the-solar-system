@@ -51,6 +51,23 @@ export function computePlanetOrbitEqjM(
 }
 
 /**
+ * Earth's own year around the Sun, sampled like the planet orbits — the
+ * observer's path through the solar system.
+ */
+export function computeEarthOrbitEqjM(utcMs: number, sampleCount = ORBIT_SAMPLE_COUNT): Float32Array {
+  const periodMs = PlanetOrbitalPeriod(Body.Earth) * 86_400_000;
+  const points = new Float32Array(sampleCount * 3);
+  for (let i = 0; i < sampleCount; i += 1) {
+    const sampleMs = utcMs - periodMs / 2 + (i / sampleCount) * periodMs;
+    const helio = HelioVector(Body.Earth, MakeTime(new Date(sampleMs)));
+    points[i * 3] = helio.x * METERS_PER_AU;
+    points[i * 3 + 1] = helio.y * METERS_PER_AU;
+    points[i * 3 + 2] = helio.z * METERS_PER_AU;
+  }
+  return points;
+}
+
+/**
  * A circle of `radiusAu` lying exactly in the J2000 ecliptic plane, expressed
  * in EQJ meters — the guide geometry that makes the plane of the solar system
  * visible.

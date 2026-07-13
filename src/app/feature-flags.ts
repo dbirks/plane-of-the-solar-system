@@ -1,6 +1,7 @@
 export type RendererPreference = "auto" | "webgl";
 export type DepthPreference = "reversed" | "log" | "standard";
 export type QualityPreference = "auto" | "low" | "high";
+export type DistanceUnit = "km" | "mi";
 
 export type FeatureFlags = {
   debug: boolean;
@@ -13,7 +14,31 @@ export type FeatureFlags = {
   hasExplicitTime: boolean;
   latitudeDeg: number;
   longitudeDeg: number;
+  /** Miles for miles-country locales (or ?units=), kilometres otherwise. */
+  distanceUnit: DistanceUnit;
 };
+
+/** Countries whose road distances are customarily miles. */
+const MILE_REGIONS = new Set(["US", "GB", "LR", "MM"]);
+
+export function resolveDistanceUnit(
+  params: URLSearchParams,
+  locales: readonly string[],
+): DistanceUnit {
+  const override = params.get("units");
+  if (override === "mi") return "mi";
+  if (override === "km") return "km";
+  for (const tag of locales) {
+    try {
+      // maximize() infers a likely region for bare language tags ("en" → US).
+      const region = new Intl.Locale(tag).maximize().region;
+      if (region) return MILE_REGIONS.has(region) ? "mi" : "km";
+    } catch {
+      // Malformed tag — try the next locale.
+    }
+  }
+  return "km";
+}
 
 function finiteQueryNumber(params: URLSearchParams, key: string, fallback: number) {
   const raw = params.get(key);
@@ -24,7 +49,10 @@ function finiteQueryNumber(params: URLSearchParams, key: string, fallback: numbe
   return Number.isFinite(value) ? value : fallback;
 }
 
-export function readFeatureFlags(search = window.location.search): FeatureFlags {
+export function readFeatureFlags(
+  search = window.location.search,
+  locales: readonly string[] = typeof navigator === "undefined" ? [] : navigator.languages,
+): FeatureFlags {
   const params = new URLSearchParams(search);
   const renderer = params.get("renderer") === "webgl" ? "webgl" : "auto";
   const depthValue = params.get("depth");
@@ -44,5 +72,6 @@ export function readFeatureFlags(search = window.location.search): FeatureFlags 
     hasExplicitTime,
     latitudeDeg: finiteQueryNumber(params, "lat", 39.7684),
     longitudeDeg: finiteQueryNumber(params, "lon", -86.1581),
+    distanceUnit: resolveDistanceUnit(params, locales),
   };
 }

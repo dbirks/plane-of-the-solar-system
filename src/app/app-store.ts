@@ -77,6 +77,8 @@ type AppState = {
   layers: LayersState;
   /** Live device-compass heading in degrees, or null when compass mode is off. */
   compassHeadingDeg: number | null;
+  /** Live device pitch (0 horizon, +90 zenith), or null when unavailable. */
+  compassPitchDeg: number | null;
   reducedMotion: boolean;
   setTargetDistanceM: (distanceM: number) => void;
   setTelemetry: (telemetry: RendererTelemetry) => void;
@@ -84,7 +86,7 @@ type AppState = {
   setOpeningTargetLabel: (label: string) => void;
   setSelectedBodyId: (bodyId: SkyBodyId | null) => void;
   setLayer: (layer: LayerId, enabled: boolean) => void;
-  setCompassHeadingDeg: (headingDeg: number | null) => void;
+  setCompassLook: (headingDeg: number | null, pitchDeg: number | null) => void;
   setReducedMotion: (enabled: boolean) => void;
 };
 
@@ -113,6 +115,7 @@ export const useAppStore = create<AppState>((set) => ({
   selectedBodyId: null,
   layers: DEFAULT_LAYERS,
   compassHeadingDeg: null,
+  compassPitchDeg: null,
   reducedMotion:
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   setTargetDistanceM: (targetDistanceM) => set({ targetDistanceM }),
@@ -121,6 +124,7 @@ export const useAppStore = create<AppState>((set) => ({
   setOpeningTargetLabel: (openingTargetLabel) => set({ openingTargetLabel }),
   setSelectedBodyId: (selectedBodyId) => set({ selectedBodyId }),
   setLayer: (layer, enabled) => set((state) => ({ layers: { ...state.layers, [layer]: enabled } })),
-  setCompassHeadingDeg: (compassHeadingDeg) => set({ compassHeadingDeg }),
+  setCompassLook: (compassHeadingDeg, compassPitchDeg) =>
+    set({ compassHeadingDeg, compassPitchDeg }),
   setReducedMotion: (reducedMotion) => set({ reducedMotion }),
 }));

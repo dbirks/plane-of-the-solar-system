@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { type FeatureFlags, readFeatureFlags } from "./feature-flags";
+import { setActiveDistanceUnit } from "../camera/distance-format";
 import { resolveObserverLocation } from "../location/observer-location";
 import { SpaceRenderer } from "../renderer/space-renderer";
 import { BodyInset } from "../ui/BodyInset";
@@ -18,6 +19,7 @@ const flags: FeatureFlags = {
   latitudeDeg: observer.latitudeDeg,
   longitudeDeg: observer.longitudeDeg,
 };
+setActiveDistanceUnit(flags.distanceUnit);
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);

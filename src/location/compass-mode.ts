@@ -10,6 +10,8 @@ export function compassSupported(): boolean {
 
 type OrientationEventLike = {
   alpha: number | null;
+  beta?: number | null;
+  gamma?: number | null;
   absolute?: boolean;
   webkitCompassHeading?: number;
 };
@@ -28,14 +30,45 @@ export function headingFromOrientationEvent(event: OrientationEventLike): number
   return (((360 - event.alpha) % 360) + 360) % 360;
 }
 
+export type OrientationLook = {
+  /** Degrees clockwise from north of the through-the-screen gaze. */
+  headingDeg: number;
+  /** Degrees above the horizon of that gaze (−90 ground, +90 zenith). */
+  pitchDeg: number | null;
+};
+
+const DEG = Math.PI / 180;
+
+/**
+ * Where the device is pointing — the direction "through the screen", i.e.
+ * what the back camera sees — from a device-orientation event, so pointing
+ * the phone at the sky looks there. Uses the W3C Z-X'-Y'' rotation (world
+ * frame: X east, Y north, Z up). Pitch is independent of alpha, so it stays
+ * valid on iOS where alpha is relative and the compass heading is separate.
+ */
+export function lookFromOrientationEvent(event: OrientationEventLike): OrientationLook | null {
+  const headingDeg = headingFromOrientationEvent(event);
+  if (headingDeg === null) return null;
+  if (typeof event.beta !== "number" || typeof event.gamma !== "number") {
+    return { headingDeg, pitchDeg: null };
+  }
+  const cosBeta = Math.cos(event.beta * DEG);
+  const cosGamma = Math.cos(event.gamma * DEG);
+  // gaze_world = R(alpha, beta, gamma) · (0, 0, −1); its up-component is
+  // −cos(beta)·cos(gamma) regardless of alpha.
+  const upComponent = -cosBeta * cosGamma;
+  const pitchDeg = Math.asin(Math.min(1, Math.max(-1, upComponent))) / DEG;
+  return { headingDeg, pitchDeg };
+}
+
 export type CompassStop = () => void;
 
 /**
- * Request permission if the platform demands it, then stream compass headings.
- * Resolves null when unsupported or denied.
+ * Request permission if the platform demands it, then stream the device look
+ * direction. Resolves null when unsupported or denied.
  */
 export async function startCompass(
-  onHeading: (headingDeg: number) => void,
+  onLook: (look: OrientationLook) => void,
 ): Promise<CompassStop | null> {
   if (!compassSupported()) return null;
   const eventConstructor = DeviceOrientationEvent as unknown as {
@@ -50,8 +83,8 @@ export async function startCompass(
     }
   }
   const listener = (event: DeviceOrientationEvent) => {
-    const heading = headingFromOrientationEvent(event as unknown as OrientationEventLike);
-    if (heading !== null) onHeading(heading);
+    const look = lookFromOrientationEvent(event as unknown as OrientationEventLike);
+    if (look !== null) onLook(look);
   };
   window.addEventListener("deviceorientationabsolute", listener as EventListener);
   window.addEventListener("deviceorientation", listener as EventListener);

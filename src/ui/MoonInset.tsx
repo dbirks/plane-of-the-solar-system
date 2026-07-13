@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import { moonPhaseName } from "../astronomy/moon-phase-name";
+import { formatBodyRange } from "../camera/distance-format";
 import { useAppStore } from "../app/app-store";
 
 const DISC_SIZE_PX = 104;
@@ -94,7 +95,7 @@ export function MoonInset() {
           </div>
           <div>
             <dt>Distance</dt>
-            <dd>{Math.round(skyReadout.moonDistanceM / 1000).toLocaleString("en-US")} km</dd>
+            <dd>{formatBodyRange(skyReadout.moonDistanceM)}</dd>
           </div>
         </dl>
       </div>
