@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAppStore } from "../app/app-store";
-import { formatDistance } from "../camera/distance-format";
+import { formatDistance, formatDistanceParts } from "../camera/distance-format";
 import {
   applySoftLandmarkAttraction,
   distanceToSlider,
@@ -43,9 +43,12 @@ export function ScaleSlider() {
     >
       <div className="scale-readout" aria-live="polite">
         <span className="eyebrow">{currentLandmark.label}</span>
-        {/* The renderer refreshes this text every frame by id — React only
-            provides the fallback cadence. */}
-        <strong id="scale-readout-value">{formatDistance(currentDistanceM)}</strong>
+        {/* The renderer refreshes the value span every frame by id; the
+            label span holds still so the line doesn't vibrate. */}
+        <strong className="scale-readout-line">
+          <span id="scale-readout-label">{formatDistanceParts(currentDistanceM).label}</span>
+          <span id="scale-readout-value">{formatDistanceParts(currentDistanceM).value}</span>
+        </strong>
       </div>
       <div className="slider-assembly">
         <input

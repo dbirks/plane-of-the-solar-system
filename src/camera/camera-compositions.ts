@@ -11,14 +11,14 @@ export function wholeEarthFovDegForAspect(viewportAspect: number): number {
 }
 
 // The gaze sweeps from the horizon at ground level to straight down at the
-// observer's dot by the atmosphere landmark (sliderT 0.22) — the journey is
+// observer's dot by the atmosphere landmark (sliderT 0.2) — the journey is
 // "look at where you are standing" almost immediately, and every scale
 // beyond keeps Earth centered while the vantage swings around it.
 const COMPOSITION_ANCHORS = [
   { sliderT: 0, composition: 0 },
-  { sliderT: 0.055, composition: 0.05 },
-  { sliderT: 0.14, composition: 0.55 },
-  { sliderT: 0.22, composition: 1 },
+  { sliderT: 0.05, composition: 0.05 },
+  { sliderT: 0.13, composition: 0.55 },
+  { sliderT: 0.2, composition: 1 },
   { sliderT: 1, composition: 1 },
 ] as const;
 

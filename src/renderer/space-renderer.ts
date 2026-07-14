@@ -18,7 +18,7 @@ import {
   type SkyState,
 } from "../astronomy/sky-state";
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
-import { formatDistance } from "../camera/distance-format";
+import { formatDistanceParts } from "../camera/distance-format";
 import {
   cameraArcBlendForAltitude,
   earthMoonCompositionForAltitude,
@@ -200,9 +200,10 @@ function createSceneObjects(
   const localCap = new THREE.Mesh(new THREE.CircleGeometry(1, 128), capMaterial);
   localCap.rotation.x = -Math.PI / 2;
 
+  // Maps-style blue: "you are here".
   const observerMarker = new THREE.Mesh(
     new THREE.SphereGeometry(1, 32, 16),
-    new THREE.MeshBasicMaterial({ color: 0xf5c977 }),
+    new THREE.MeshBasicMaterial({ color: 0x4c8df5 }),
   );
 
   const coordinateGrid = createCoordinateGrid();
@@ -266,6 +267,7 @@ export class SpaceRenderer {
   private readonly arcQuaternion = new THREE.Quaternion();
   private moonGeoLocalM: Vec3d | null = null;
   private readoutElement: HTMLElement | null = null;
+  private readoutLabelElement: HTMLElement | null = null;
   private earthGuides: THREE.LineSegments | null = null;
   private slowFrameStreak = 0;
   private adaptiveDprCap = Number.POSITIVE_INFINITY;
@@ -597,6 +599,7 @@ export class SpaceRenderer {
     // the ecliptic — Earth stands alone in frame with the observer's dot on
     // its side and the Sun and inner system in the background, day or night.
     const arcBlend = cameraArcBlendForAltitude(altitudeM);
+    const rollBlend = eclipticRollBlendForAltitude(altitudeM);
     this.cameraDirLocal.set(0, 1, 0);
     this.arcQuaternion.identity();
     if (arcBlend > 0.001) {
@@ -608,6 +611,31 @@ export class SpaceRenderer {
       const fullArc = new THREE.Quaternion().setFromUnitVectors(this.cameraDirLocal, revealDir);
       this.arcQuaternion.slerp(fullArc, arcBlend);
       this.cameraDirLocal.applyQuaternion(this.arcQuaternion);
+    }
+
+    // Beyond whole Earth a drag orbits the vantage around Earth instead of
+    // panning the gaze: the same yaw/pitch offsets rotate the whole base
+    // frame about Earth's center. Blended with the arc, the on-screen drag
+    // feel stays continuous — pure look at the ground, pure orbit out here.
+    const orbitBlend = arcBlend;
+    if (orbitBlend > 0.001 && (this.yawOffset !== 0 || this.pitchOffset !== 0)) {
+      const gaze = this.cameraDirLocal.clone().multiplyScalar(-1);
+      const upAxis = new THREE.Vector3(0, 1 - rollBlend, 0).addScaledVector(
+        this.eclipticNorthLocal,
+        rollBlend,
+      );
+      upAxis.addScaledVector(gaze, -upAxis.dot(gaze));
+      if (upAxis.lengthSq() > 1e-8) {
+        upAxis.normalize();
+        const rightAxis = new THREE.Vector3().crossVectors(gaze, upAxis).normalize();
+        const orbitQuaternion = new THREE.Quaternion()
+          .setFromAxisAngle(upAxis, this.yawOffset * orbitBlend)
+          .multiply(
+            new THREE.Quaternion().setFromAxisAngle(rightAxis, this.pitchOffset * orbitBlend),
+          );
+        this.cameraDirLocal.applyQuaternion(orbitQuaternion);
+        this.arcQuaternion.premultiply(orbitQuaternion);
+      }
     }
     // Earth's center in camera-relative render space; the camera itself
     // always sits at the origin.
@@ -809,7 +837,6 @@ export class SpaceRenderer {
     // The reveal: screen-up rolls from the observer's zenith to ecliptic
     // north on the way out, so the solar system's plane settles flat while
     // your ground visibly tilts — you were standing on the side of a planet.
-    const rollBlend = eclipticRollBlendForAltitude(altitudeM);
     if (rollBlend > 0.001) {
       const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(baseQuaternion);
       const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(baseQuaternion);
@@ -853,10 +880,16 @@ export class SpaceRenderer {
       }
     }
 
+    // The share of the offsets not consumed by the orbit applies as free
+    // look, so the drag's total gaze change is the same at every blend.
+    const lookFraction = 1 - orbitBlend;
     const userQuaternion = new THREE.Quaternion()
-      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yawOffset)
+      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yawOffset * lookFraction)
       .multiply(
-        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pitchOffset),
+        new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(1, 0, 0),
+          this.pitchOffset * lookFraction,
+        ),
       );
     this.camera.quaternion.copy(baseQuaternion).multiply(userQuaternion);
     this.camera.fov = baseFovDeg;
@@ -879,10 +912,14 @@ export class SpaceRenderer {
     // The big distance readout tracks the spring every frame (direct DOM —
     // React stays out of the frame loop; telemetry keeps the slow fallback).
     this.readoutElement ??= document.getElementById("scale-readout-value");
-    if (this.readoutElement) {
-      const readoutText = formatDistance(altitudeM);
-      if (this.readoutElement.textContent !== readoutText) {
-        this.readoutElement.textContent = readoutText;
+    this.readoutLabelElement ??= document.getElementById("scale-readout-label");
+    if (this.readoutElement && this.readoutLabelElement) {
+      const parts = formatDistanceParts(altitudeM);
+      if (this.readoutElement.textContent !== parts.value) {
+        this.readoutElement.textContent = parts.value;
+      }
+      if (this.readoutLabelElement.textContent !== parts.label) {
+        this.readoutLabelElement.textContent = parts.label;
       }
     }
 
@@ -905,6 +942,18 @@ export class SpaceRenderer {
           physical: true,
         });
       }
+      // Earth itself, straight along the gaze at Earth's render center.
+      const earthLength = earthCenterRender.length() || 1;
+      const earthRay: Vec3d = [
+        earthCenterRender.x / earthLength,
+        earthCenterRender.y / earthLength,
+        earthCenterRender.z / earthLength,
+      ];
+      overrides.set("earth", {
+        directionLocalThree: earthRay,
+        ...rayToAltAzDeg(earthRay),
+        physical: true,
+      });
     }
     this.overlay?.update(
       this.camera,
@@ -918,7 +967,11 @@ export class SpaceRenderer {
       },
       {
         anchors: this.planeGuideAnchors,
-        opacity: layers["ecliptic-rings"] ? 0.55 * (1 - systemReveal) : 0,
+        // The caption is an orientation aid for the ground and atmosphere;
+        // beyond that the band and orbit geometry speak for themselves.
+        opacity: layers["ecliptic-rings"]
+          ? 0.55 * (1 - smoothstep(100_000, 300_000, altitudeM))
+          : 0,
       },
     );
     this.framesSinceTelemetry += 1;

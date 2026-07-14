@@ -242,11 +242,12 @@ input:focus-visible {
   position: absolute;
   top: 0;
   left: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  margin: -9px 0 0 -9px;
+  /* A fixed 20px box centered on the projected point: ring and label hang
+     off it absolutely, so the ring stays centered on the body no matter how
+     wide the label is. */
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
   padding: 0;
   border: none;
   background: none;
@@ -261,11 +262,27 @@ input:focus-visible {
 }
 
 .sky-marker-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 18px;
   height: 18px;
   border: 1px solid rgb(245 201 119 / 0.75);
   border-radius: 999px;
   box-shadow: 0 0 10px rgb(245 201 119 / 0.25);
+}
+
+.sky-marker-label {
+  position: absolute;
+  top: 23px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.sky-marker:focus-visible .sky-marker-ring {
+  outline: 2px solid rgb(245 217 165 / 0.9);
+  outline-offset: 2px;
 }
 
 /* Captions riding the ecliptic band, rotated to its local screen slope. */
@@ -329,6 +346,20 @@ input:focus-visible {
   font-size: 1.12rem;
   font-weight: 400;
   white-space: nowrap;
+}
+
+/* Fixed-width row: the label pins left, the value pins right, and the gap
+   between them absorbs digit-width changes so nothing vibrates. */
+.scale-readout strong.scale-readout-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  width: 272px;
+  max-width: calc(100vw - 24px);
+}
+
+.scale-readout-line #scale-readout-value {
+  font-variant-numeric: tabular-nums;
 }
 
 .slider-assembly {
@@ -518,8 +549,9 @@ input:focus-visible {
 }
 
 .intro-begin {
-  width: 100%;
-  padding: 12px;
+  display: block;
+  margin-left: auto;
+  padding: 11px 34px;
   border: 1px solid rgb(245 201 119 / 0.55);
   border-radius: 10px;
   background: rgb(245 201 119 / 0.12);
@@ -657,6 +689,10 @@ input:focus-visible {
     font-size: clamp(0.78rem, 4vw, 0.94rem);
   }
 
+  .scale-readout strong.scale-readout-line {
+    width: 224px;
+  }
+
   .slider-assembly {
     width: 136px;
   }
@@ -709,6 +745,8 @@ input:focus-visible {
 }
 
 .sky-marker--edge .sky-marker-ring {
+  top: 4px;
+  left: 4px;
   width: 10px;
   height: 10px;
   opacity: 0.6;
@@ -754,7 +792,8 @@ input:focus-visible {
 
 .location-inputs {
   display: flex;
-  gap: 12px;
+  align-items: flex-end;
+  gap: 10px;
   margin-bottom: 12px;
 }
 
@@ -763,6 +802,7 @@ input:focus-visible {
   flex: 1;
   flex-direction: column;
   gap: 5px;
+  min-width: 0;
   color: #9db8ba;
   font-size: 0.62rem;
   letter-spacing: 0.1em;
@@ -770,12 +810,25 @@ input:focus-visible {
 }
 
 .location-inputs input {
+  width: 100%;
+  min-width: 0;
   padding: 7px 9px;
   border: 1px solid rgb(157 207 210 / 0.25);
   border-radius: 8px;
   background: rgb(6 20 27 / 0.85);
   color: #e8f2f2;
   font-size: 0.82rem;
+}
+
+.location-section {
+  display: block;
+  margin: 14px 0 8px;
+}
+
+.location-remember {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgb(157 207 210 / 0.14);
 }
 
 .location-actions {

@@ -9,7 +9,7 @@ import {
 import { METERS_PER_AU } from "../coordinates/units";
 import type { SkyBodyId } from "./sky-state";
 
-export type PlanetId = Exclude<SkyBodyId, "sun" | "moon">;
+export type PlanetId = Exclude<SkyBodyId, "sun" | "moon" | "earth">;
 
 const PLANET_BODIES: Record<PlanetId, Body> = {
   mercury: Body.Mercury,

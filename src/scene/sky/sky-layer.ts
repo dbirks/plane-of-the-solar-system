@@ -201,8 +201,8 @@ export class SkyLayer {
   private readonly sunDirectionGuide: THREE.LineSegments;
   private readonly eclipticBand: THREE.LineSegments;
   private readonly eclipticBandFill: THREE.Mesh;
-  private readonly sunsetGlow: THREE.Sprite;
-  private readonly sunriseGlow: THREE.Sprite;
+  private readonly sunsetGlow: THREE.Mesh;
+  private readonly sunriseGlow: THREE.Mesh;
   private hasSunHorizonEvents = false;
 
   constructor() {
@@ -357,23 +357,31 @@ export class SkyLayer {
       .catch(() => undefined);
 
     // Horizon markers for where the Sun went down (warm orange) and where it
-    // will come up (yellow into a cool blue halo) — night-time wayfinding.
-    const glowSprite = (core: string, halo: string) => {
-      const sprite = new THREE.Sprite(
-        new THREE.SpriteMaterial({
+    // will come up (yellow into a cool blue halo): night-time wayfinding.
+    // Quads fixed in the sky frame, not billboards, so they lie along the
+    // actual horizon and tilt with it as the view moves.
+    const glowQuad = (core: string, halo: string) => {
+      const quad = new THREE.Mesh(
+        new THREE.PlaneGeometry(
+          STAR_SHELL_RENDER_RADIUS * 0.42,
+          STAR_SHELL_RENDER_RADIUS * 0.15,
+        ),
+        new THREE.MeshBasicMaterial({
           map: buildHorizonGlowTexture(core, halo),
           transparent: true,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
           opacity: 0,
+          side: THREE.DoubleSide,
         }),
       );
-      sprite.scale.set(STAR_SHELL_RENDER_RADIUS * 0.3, STAR_SHELL_RENDER_RADIUS * 0.12, 1);
-      sprite.visible = false;
-      return sprite;
+      quad.renderOrder = -5;
+      quad.frustumCulled = false;
+      quad.visible = false;
+      return quad;
     };
-    this.sunsetGlow = glowSprite("rgba(255, 168, 76, 0.8)", "rgba(224, 96, 40, 0.3)");
-    this.sunriseGlow = glowSprite("rgba(255, 228, 148, 0.75)", "rgba(110, 160, 224, 0.3)");
+    this.sunsetGlow = glowQuad("rgba(255, 168, 76, 0.8)", "rgba(224, 96, 40, 0.3)");
+    this.sunriseGlow = glowQuad("rgba(255, 228, 148, 0.75)", "rgba(110, 160, 224, 0.3)");
 
     this.group.add(
       this.starPoints,
@@ -394,16 +402,19 @@ export class SkyLayer {
   setSunHorizonEvents(events: SunHorizonEvents | null): void {
     this.hasSunHorizonEvents = events !== null;
     if (!events) return;
-    for (const [sprite, azimuthDeg] of [
+    for (const [quad, azimuthDeg] of [
       [this.sunsetGlow, events.setAzimuthDeg],
       [this.sunriseGlow, events.riseAzimuthDeg],
     ] as const) {
-      const direction = altAzToLocalThree(1.2, azimuthDeg);
-      sprite.position.set(
+      const direction = altAzToLocalThree(0.8, azimuthDeg);
+      quad.position.set(
         direction[0] * STAR_SHELL_RENDER_RADIUS * 0.97,
         direction[1] * STAR_SHELL_RENDER_RADIUS * 0.97,
         direction[2] * STAR_SHELL_RENDER_RADIUS * 0.97,
       );
+      // Face the observer with the long axis lying along the horizon.
+      quad.up.set(0, 1, 0);
+      quad.lookAt(0, 0, 0);
     }
   }
 
@@ -521,13 +532,13 @@ export class SkyLayer {
     // Sunset/sunrise wayfinding glows: dusk through dawn, ground scales only.
     const duskFactor = clamp01((4 - sunAltitudeDeg) / 8);
     const horizonGlowFade = (1 - smoothstepNumber(20_000, 120_000, altitudeM)) * duskFactor;
-    for (const [sprite, strength] of [
+    for (const [quad, strength] of [
       [this.sunsetGlow, 0.55],
       [this.sunriseGlow, 0.45],
     ] as const) {
       const opacity = this.hasSunHorizonEvents ? horizonGlowFade * strength : 0;
-      sprite.visible = opacity > 0.01;
-      (sprite.material as THREE.SpriteMaterial).opacity = opacity;
+      quad.visible = opacity > 0.01;
+      (quad.material as THREE.MeshBasicMaterial).opacity = opacity;
     }
 
     // The sky-shell ecliptic hands off to the heliocentric rings and orbit

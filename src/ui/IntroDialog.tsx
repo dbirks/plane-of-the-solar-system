@@ -42,25 +42,24 @@ export function IntroDialog({ open, onClose }: { open: boolean; onClose: () => v
         <span className="eyebrow">Welcome to</span>
         <h2>Plane of the Solar System</h2>
         <p>
-          The real sky over your head, right now — and one control that pulls you out until the
-          whole solar system assembles around you, always at true scale.
+          This is tonight's actual sky. Everything is where it really is, at its real size and
+          distance, and you can zoom all the way out to Pluto.
         </p>
         <ul className="intro-list">
           <li>
-            <strong>Look around</strong> — drag the sky.
+            <strong>Drag</strong> to look around the sky.
           </li>
           <li>
-            <strong>Change scale</strong> — scroll, or ride the rail on the right from the ground
-            to Pluto.
+            <strong>Scroll</strong> (or use the rail on the right) to leave the ground.
           </li>
           <li>
-            <strong>Visit things</strong> — tap any marker to turn toward it and read its story.
+            <strong>Tap a marker</strong> to turn toward that body and read about it.
           </li>
         </ul>
         <div className="intro-actions">
           {compassSupported() && (
             <button type="button" className="quiet-button" onClick={() => void onPhoneLook()}>
-              {phoneLookActive ? "Phone look on" : "Point with phone"}
+              {phoneLookActive ? "Compass mode on" : "Compass mode"}
             </button>
           )}
           <label className="intro-motion">
@@ -69,12 +68,12 @@ export function IntroDialog({ open, onClose }: { open: boolean; onClose: () => v
               checked={reducedMotion}
               onChange={(event) => setReducedMotion(event.currentTarget.checked)}
             />
-            Reduce camera motion
+            Gentler camera (less motion)
           </label>
         </div>
         {phoneLookStatus && <p className="location-hint">{phoneLookStatus}</p>}
         <button type="button" className="intro-begin" onClick={dismiss}>
-          Step outside
+          Continue
         </button>
       </aside>
     </div>

@@ -27,31 +27,65 @@ export function formatBodyRange(distanceM: number, unit: DistanceUnit = activeUn
   return `${Math.round(distanceM / 1_000).toLocaleString("en-US")} km`;
 }
 
-export function formatDistance(distanceM: number, unit: DistanceUnit = activeUnit): string {
+/** Coarse at the far end: tenths below 10 AU, whole numbers beyond. */
+function formatAuValue(distanceM: number): string {
+  const au = distanceM / METERS_PER_AU;
+  return au >= 10 ? `${Math.round(au)} AU` : `${au.toFixed(1)} AU`;
+}
+
+export type DistanceParts = {
+  /** "Altitude" or "Distance from Earth" — stable while traveling. */
+  label: string;
+  /** The changing measurement, e.g. "820 ft", "12,427 mi", "80 AU". */
+  value: string;
+};
+
+/** Label and value separately, so the readout label can hold still. */
+export function formatDistanceParts(
+  distanceM: number,
+  unit: DistanceUnit = activeUnit,
+): DistanceParts {
   // In the altitude regime, report height above sea level; beyond it the
   // ground elevation is far below the display precision.
   const altitudeM = distanceM + groundElevationM;
   if (unit === "mi") {
     if (altitudeM < METERS_PER_MILE) {
-      return `Altitude · ${Math.round(altitudeM / METERS_PER_FOOT).toLocaleString("en-US")} ft`;
+      return {
+        label: "Altitude",
+        value: `${Math.round(altitudeM / METERS_PER_FOOT).toLocaleString("en-US")} ft`,
+      };
     }
     if (distanceM < 1_000_000) {
       const miles = altitudeM / METERS_PER_MILE;
-      return `Altitude · ${miles < 100 ? miles.toFixed(1) : Math.round(miles)} mi`;
+      return { label: "Altitude", value: `${miles < 100 ? miles.toFixed(1) : Math.round(miles)} mi` };
     }
     if (distanceM < 0.1 * METERS_PER_AU) {
-      return `Distance from Earth · ${Math.round(distanceM / METERS_PER_MILE).toLocaleString("en-US")} mi`;
+      return {
+        label: "Distance from Earth",
+        value: `${Math.round(distanceM / METERS_PER_MILE).toLocaleString("en-US")} mi`,
+      };
     }
-    return `Distance from Earth · ${(distanceM / METERS_PER_AU).toFixed(2)} AU`;
+    return { label: "Distance from Earth", value: formatAuValue(distanceM) };
   }
 
-  if (altitudeM < 1_000) return `Altitude · ${Math.round(altitudeM)} m`;
+  if (altitudeM < 1_000) return { label: "Altitude", value: `${Math.round(altitudeM)} m` };
   if (distanceM < 1_000_000) {
     const kilometers = altitudeM / 1_000;
-    return `Altitude · ${kilometers < 100 ? kilometers.toFixed(1) : Math.round(kilometers)} km`;
+    return {
+      label: "Altitude",
+      value: `${kilometers < 100 ? kilometers.toFixed(1) : Math.round(kilometers)} km`,
+    };
   }
   if (distanceM < 0.1 * METERS_PER_AU) {
-    return `Distance from Earth · ${Math.round(distanceM / 1_000).toLocaleString("en-US")} km`;
+    return {
+      label: "Distance from Earth",
+      value: `${Math.round(distanceM / 1_000).toLocaleString("en-US")} km`,
+    };
   }
-  return `Distance from Earth · ${(distanceM / METERS_PER_AU).toFixed(2)} AU`;
+  return { label: "Distance from Earth", value: formatAuValue(distanceM) };
+}
+
+export function formatDistance(distanceM: number, unit: DistanceUnit = activeUnit): string {
+  const parts = formatDistanceParts(distanceM, unit);
+  return `${parts.label} · ${parts.value}`;
 }

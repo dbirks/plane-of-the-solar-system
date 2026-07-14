@@ -40,7 +40,8 @@ test("astronomy readouts match the fixed scenario", async ({ page }) => {
 test("sky markers exist for all bright bodies and ghost below the horizon", async ({ page }) => {
   await page.goto(moonScenario);
   const markers = page.locator(".sky-marker");
-  await expect(markers).toHaveCount(10);
+  // Ten sky bodies plus the synthetic Earth marker (hidden at ground scale).
+  await expect(markers).toHaveCount(11);
   const moon = page.locator(".sky-marker[data-body=moon]");
   await expect(moon).not.toHaveClass(/sky-marker--ghost/);
   await expect(moon).toHaveAccessibleName(/22 degrees above the horizon/);
@@ -115,8 +116,15 @@ test("location panel offers manual and device location without any opening promp
   await page.getByRole("button", { name: /Facing the Moon/ }).click();
   await expect(page.getByLabel("Latitude in degrees")).toHaveValue("39.7684");
   await expect(page.getByLabel("Longitude in degrees")).toHaveValue("-86.1581");
-  await expect(page.getByRole("button", { name: "Use device location" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use my location" })).toBeVisible();
   await expect(page.getByText(/Nothing is sent anywhere/)).toBeVisible();
+
+  // The open panel must fit the viewport, phones included.
+  const panelBox = await page.getByRole("complementary", { name: "Observer location" }).boundingBox();
+  const viewport = page.viewportSize();
+  expect(panelBox).not.toBeNull();
+  expect(panelBox!.x).toBeGreaterThanOrEqual(0);
+  expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
 
   await page.getByLabel("Latitude in degrees").fill("-33.87");
   await page.getByLabel("Longitude in degrees").fill("151.21");
@@ -129,7 +137,7 @@ test("sky-proxy markers fade on the journey while the physical Moon's persists",
   page,
 }) => {
   await page.goto(moonScenario);
-  await page.getByRole("slider", { name: "Distance from the ground" }).fill("0.42");
+  await page.getByRole("slider", { name: "Distance from the ground" }).fill("0.36");
   const sunMarker = page.locator(".sky-marker[data-body=sun]");
   await expect
     .poll(async () => sunMarker.evaluate((element) => element.style.display), {

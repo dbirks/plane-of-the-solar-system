@@ -18,6 +18,9 @@ import type { Vec3d } from "../coordinates/vec3d";
 export type SkyBodyId =
   | "sun"
   | "moon"
+  // Synthetic overlay-only entry: Earth has no place in Earth's own sky,
+  // but gets a marker once the journey reaches system scale.
+  | "earth"
   | "mercury"
   | "venus"
   | "mars"

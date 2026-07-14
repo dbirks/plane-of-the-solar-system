@@ -32,12 +32,12 @@ describe("logarithmic journey scale", () => {
 
   it("uses perceptual logarithmic anchors for a responsive ascent", () => {
     expect(distanceToSlider(1_000)).toBeCloseTo(0.1, 12);
-    expect(distanceToSlider(100_000)).toBeCloseTo(0.22, 12);
-    expect(distanceToSlider(500_000)).toBeCloseTo(0.29, 12);
+    expect(distanceToSlider(100_000)).toBeCloseTo(0.2, 12);
+    expect(distanceToSlider(500_000)).toBeCloseTo(0.26, 12);
     // The quiet atmosphere → whole-Earth leg is compressed; the journey
     // beyond, where the system assembles, owns most of the slider.
-    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.42, 12);
-    expect(distanceToSlider(500_000_000)).toBeCloseTo(0.6, 12);
+    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.36, 12);
+    expect(distanceToSlider(500_000_000)).toBeCloseTo(0.52, 12);
     expect(JOURNEY_LANDMARKS.at(-1)).toMatchObject({
       id: "full-system",
       distanceM: 12_000_000_000_000,
@@ -52,7 +52,9 @@ describe("logarithmic journey scale", () => {
     expect(Math.abs(applySoftLandmarkAttraction(near) - atmosphereT)).toBeLessThan(
       Math.abs(near - atmosphereT),
     );
-    expect(applySoftLandmarkAttraction(atmosphereT + 0.05)).toBeCloseTo(atmosphereT + 0.05, 12);
+    // Midway between the atmosphere (0.2) and low-orbit (0.26) anchors,
+    // outside both attraction radii.
+    expect(applySoftLandmarkAttraction(atmosphereT + 0.03)).toBeCloseTo(atmosphereT + 0.03, 12);
   });
 });
 
@@ -82,11 +84,11 @@ describe("whole-Earth composition", () => {
   it("reaches the nadir gaze by the atmosphere landmark", () => {
     expect(journeyCompositionForSlider(0)).toBe(0);
     // Sweeping down through the ascent…
-    expect(journeyCompositionForSlider(0.14)).toBeCloseTo(0.55, 12);
+    expect(journeyCompositionForSlider(0.13)).toBeCloseTo(0.55, 12);
     // …and looking straight at the observer's dot from the atmosphere on.
-    expect(journeyCompositionForSlider(0.22)).toBe(1);
-    expect(journeyCompositionForSlider(0.29)).toBe(1);
-    expect(journeyCompositionForSlider(0.42)).toBe(1);
+    expect(journeyCompositionForSlider(0.2)).toBe(1);
+    expect(journeyCompositionForSlider(0.26)).toBe(1);
+    expect(journeyCompositionForSlider(0.36)).toBe(1);
     expect(journeyCompositionForSlider(1)).toBe(1);
   });
 
@@ -158,7 +160,8 @@ describe("distance readout", () => {
     expect(formatDistance(12_400, "km")).toBe("Altitude · 12.4 km");
     expect(formatDistance(20_000_000, "km")).toBe("Distance from Earth · 20,000 km");
     expect(formatDistance(500_000_000, "km")).toBe("Distance from Earth · 500,000 km");
-    expect(formatDistance(8_000_000_000_000, "km")).toBe("Distance from Earth · 53.48 AU");
+    expect(formatDistance(8_000_000_000_000, "km")).toBe("Distance from Earth · 53 AU");
+    expect(formatDistance(3 * 1.495978707e11, "km")).toBe("Distance from Earth · 3.0 AU");
   });
 
   it("formats miles for miles-country locales", () => {
@@ -167,7 +170,7 @@ describe("distance readout", () => {
     expect(formatDistance(20_000_000, "mi")).toBe("Distance from Earth · 12,427 mi");
     expect(formatDistance(500_000_000, "mi")).toBe("Distance from Earth · 310,686 mi");
     // Astronomical distances stay in AU regardless of region.
-    expect(formatDistance(8_000_000_000_000, "mi")).toBe("Distance from Earth · 53.48 AU");
+    expect(formatDistance(8_000_000_000_000, "mi")).toBe("Distance from Earth · 53 AU");
     expect(formatBodyRange(382_500_000, "mi")).toBe("237,674 mi");
     expect(formatBodyRange(382_500_000, "km")).toBe("382,500 km");
   });

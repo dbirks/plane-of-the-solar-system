@@ -20,7 +20,7 @@ test("opens at ground scale without a permission prompt", async ({ page }) => {
 test("slider reaches whole Earth and remains keyboard accessible", async ({ page }) => {
   await page.goto(fixedScenario);
   const slider = page.getByRole("slider", { name: "Distance from the ground" });
-  await slider.fill("0.42");
+  await slider.fill("0.36");
   // Headless Chromium reports en-US, so the readout is region-detected miles.
   await expect(slider).toHaveAttribute("aria-valuetext", "Distance from Earth · 12,427 mi");
   await expect(page.getByText("Whole Earth", { exact: true }).first()).toBeVisible();
@@ -34,7 +34,7 @@ test("wheel changes scale and help exposes reduced motion", async ({ page }) => 
     .poll(async () => page.getByRole("slider").getAttribute("aria-valuetext"))
     .not.toBe("Altitude · 820 ft");
   await page.getByRole("button", { name: "About & how to move" }).click();
-  await expect(page.getByRole("checkbox", { name: "Reduce camera motion" })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "Gentler camera (less motion)" })).toBeVisible();
 });
 
 test("canvas supports drag navigation", async ({ page }) => {
@@ -56,7 +56,7 @@ test("canvas supports drag navigation", async ({ page }) => {
   await page.mouse.up();
   await expect(canvas).not.toHaveClass(/is-dragging/);
 
-  await page.getByRole("slider", { name: "Distance from the ground" }).fill("0.42");
+  await page.getByRole("slider", { name: "Distance from the ground" }).fill("0.36");
   const orientationOffset = page
     .getByText("Orientation offset", { exact: true })
     .locator("..")

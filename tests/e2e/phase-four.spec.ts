@@ -18,7 +18,7 @@ test("journey reaches the full solar system in the heliocentric domain", async (
   await page.getByRole("button", { name: "Solar system" }).click();
   await expect(page.getByRole("slider", { name: "Distance from the ground" })).toHaveAttribute(
     "aria-valuetext",
-    "Distance from Earth · 80.22 AU",
+    "Distance from Earth · 80 AU",
   );
   await expect
     .poll(
@@ -33,7 +33,8 @@ test("journey reaches the full solar system in the heliocentric domain", async (
 test("all ten body markers exist and Pluto is selectable at system scale", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(fixedScenario);
-  await expect(page.locator(".sky-marker")).toHaveCount(10);
+  // Ten sky bodies plus the synthetic Earth marker.
+  await expect(page.locator(".sky-marker")).toHaveCount(11);
 
   await page.getByRole("button", { name: "Solar system" }).click();
   await expect

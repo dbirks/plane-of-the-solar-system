@@ -21,7 +21,7 @@ test("Earth imagery loads asynchronously without blocking the opening", async ({
     .poll(async () => (await debugValue(page, "GPU resources").textContent()) ?? "", {
       timeout: 20_000,
     })
-    .toContain("6 tex");
+    .toContain("8 tex");
 });
 
 test("layers panel toggles explanation geometry and documents credits", async ({ page }) => {
@@ -57,7 +57,7 @@ test("marker labels declutter when bodies crowd together", async ({ page }) => {
 test("reduced motion preference is exposed and honored in settings", async ({ page }) => {
   await page.goto(fixedScenario);
   await page.getByRole("button", { name: "About & how to move" }).click();
-  const checkbox = page.getByRole("checkbox", { name: "Reduce camera motion" });
+  const checkbox = page.getByRole("checkbox", { name: "Gentler camera (less motion)" });
   await checkbox.check();
   await expect(checkbox).toBeChecked();
 });

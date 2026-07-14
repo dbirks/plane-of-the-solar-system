@@ -100,7 +100,7 @@ export function MoonInset() {
         </dl>
       </div>
       <p className="moon-inset-note">
-        A close-up for reading the phase — out in the sky, the Moon keeps its true size and
+        A close-up for reading the phase. Out in the sky, the Moon keeps its true size and
         distance.
       </p>
     </aside>

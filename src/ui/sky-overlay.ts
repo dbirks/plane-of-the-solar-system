@@ -70,7 +70,15 @@ export class SkyOverlay {
 
   /** Rebuild marker bindings from a fresh astronomy snapshot (~1 Hz). */
   setSky(sky: SkyState): void {
-    const bodies: SkyBodyState[] = [sky.sun, sky.moon, ...sky.planets];
+    // Synthetic Earth entry: only shown at system scale via overrides, with
+    // top label priority (it is where the viewer lives). Never a sky proxy.
+    const earthBody = {
+      ...sky.moon,
+      id: "earth",
+      label: "Earth",
+      magnitude: -99,
+    } as unknown as SkyBodyState;
+    const bodies: SkyBodyState[] = [sky.sun, sky.moon, earthBody, ...sky.planets];
     for (const body of bodies) {
       let entry = this.markers.get(body.id);
       if (!entry) {
@@ -138,8 +146,16 @@ export class SkyOverlay {
         const override = overrides?.get(entry.body.id);
         const ghosted = entry.element.classList.contains("sky-marker--ghost");
         // The Moon's marker persists (physical body); other markers show at
-        // ground scale as sky proxies and again at system scale.
-        let opacity = isMoon ? 1 : Math.max(proxyOpacity, override ? systemReveal : 0);
+        // ground scale as sky proxies and again at system scale. Earth only
+        // exists at system scale (there is no Earth in Earth's sky).
+        let opacity =
+          entry.body.id === "earth"
+            ? override
+              ? systemReveal
+              : 0
+            : isMoon
+              ? 1
+              : Math.max(proxyOpacity, override ? systemReveal : 0);
         if (ghosted && !prefs.belowHorizon) opacity = 0;
         if (opacity <= 0.02) {
           entry.visible = false;
