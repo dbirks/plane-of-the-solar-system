@@ -13,6 +13,7 @@ import {
   pointUV,
   smoothstep,
   sub,
+  texture,
   uniform,
   vec2,
   vec3,
@@ -21,7 +22,12 @@ import * as THREE from "three/webgpu";
 
 import type { MoonPlacement } from "../../astronomy/moon-placement";
 import { computeEclipticRingEqjM, eclipticNorthEqj } from "../../astronomy/planet-orbits";
-import type { SkyBodyState, SkyState } from "../../astronomy/sky-state";
+import {
+  altAzToLocalThree,
+  type SkyBodyState,
+  type SkyState,
+  type SunHorizonEvents,
+} from "../../astronomy/sky-state";
 import { STAR_COLOR_INDEX, STAR_COUNT, STAR_DEC_DEG, STAR_MAG, STAR_RA_DEG } from "./star-catalog";
 
 /**
@@ -157,6 +163,31 @@ export function buildGlowTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+/** Soft horizon glow for marking where the Sun sets or rises. */
+function buildHorizonGlowTexture(coreColor: string, haloColor: string): THREE.CanvasTexture {
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d")!;
+  const gradient = context.createRadialGradient(
+    size / 2,
+    size / 2,
+    0,
+    size / 2,
+    size / 2,
+    size / 2,
+  );
+  gradient.addColorStop(0, coreColor);
+  gradient.addColorStop(0.45, haloColor);
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, size, size);
+  const glowTexture = new THREE.CanvasTexture(canvas);
+  glowTexture.colorSpace = THREE.SRGBColorSpace;
+  return glowTexture;
+}
+
 export class SkyLayer {
   readonly group = new THREE.Group();
 
@@ -170,6 +201,9 @@ export class SkyLayer {
   private readonly sunDirectionGuide: THREE.LineSegments;
   private readonly eclipticBand: THREE.LineSegments;
   private readonly eclipticBandFill: THREE.Mesh;
+  private readonly sunsetGlow: THREE.Sprite;
+  private readonly sunriseGlow: THREE.Sprite;
+  private hasSunHorizonEvents = false;
 
   constructor() {
     this.starPoints = buildStarField(1);
@@ -300,9 +334,46 @@ export class SkyLayer {
     // the true Sun direction. A touch of earthshine keeps the night side legible.
     const moonMaterial = new THREE.MeshBasicNodeMaterial();
     const lit = max(float(0), dot(normalWorld, this.moonSunDirectionUniform));
-    moonMaterial.colorNode = mul(vec3(0.86, 0.85, 0.82), add(mul(lit, 0.95), 0.035));
+    const moonShade = add(mul(lit, 0.95), 0.035);
+    moonMaterial.colorNode = mul(vec3(0.86, 0.85, 0.82), moonShade);
     this.moonMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), moonMaterial);
     this.moonMesh.renderOrder = -5;
+
+    // Real lunar surface (NASA LRO) loads after the opening scene; the flat
+    // albedo above stays the fallback. Same physical lighting either way.
+    void new THREE.TextureLoader()
+      .loadAsync(`${import.meta.env.BASE_URL}textures/moon-lroc-2048.jpg`)
+      .then((moonAlbedo) => {
+        moonAlbedo.colorSpace = THREE.SRGBColorSpace;
+        moonAlbedo.anisotropy = 4;
+        const texturedMaterial = new THREE.MeshBasicNodeMaterial();
+        const texturedLit = max(float(0), dot(normalWorld, this.moonSunDirectionUniform));
+        texturedMaterial.colorNode = mul(
+          mul(texture(moonAlbedo), 1.25),
+          add(mul(texturedLit, 0.95), 0.035),
+        );
+        this.moonMesh.material = texturedMaterial;
+      })
+      .catch(() => undefined);
+
+    // Horizon markers for where the Sun went down (warm orange) and where it
+    // will come up (yellow into a cool blue halo) — night-time wayfinding.
+    const glowSprite = (core: string, halo: string) => {
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: buildHorizonGlowTexture(core, halo),
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          opacity: 0,
+        }),
+      );
+      sprite.scale.set(STAR_SHELL_RENDER_RADIUS * 0.3, STAR_SHELL_RENDER_RADIUS * 0.12, 1);
+      sprite.visible = false;
+      return sprite;
+    };
+    this.sunsetGlow = glowSprite("rgba(255, 168, 76, 0.8)", "rgba(224, 96, 40, 0.3)");
+    this.sunriseGlow = glowSprite("rgba(255, 228, 148, 0.75)", "rgba(110, 160, 224, 0.3)");
 
     this.group.add(
       this.starPoints,
@@ -314,7 +385,26 @@ export class SkyLayer {
       this.sunDirectionGuide,
       this.eclipticBand,
       this.eclipticBandFill,
+      this.sunsetGlow,
+      this.sunriseGlow,
     );
+  }
+
+  /** Place the sunset/sunrise horizon glows (recomputed every few minutes). */
+  setSunHorizonEvents(events: SunHorizonEvents | null): void {
+    this.hasSunHorizonEvents = events !== null;
+    if (!events) return;
+    for (const [sprite, azimuthDeg] of [
+      [this.sunsetGlow, events.setAzimuthDeg],
+      [this.sunriseGlow, events.riseAzimuthDeg],
+    ] as const) {
+      const direction = altAzToLocalThree(1.2, azimuthDeg);
+      sprite.position.set(
+        direction[0] * STAR_SHELL_RENDER_RADIUS * 0.97,
+        direction[1] * STAR_SHELL_RENDER_RADIUS * 0.97,
+        direction[2] * STAR_SHELL_RENDER_RADIUS * 0.97,
+      );
+    }
   }
 
   /** Point-size multiplier compensating for device pixel ratio. */
@@ -350,6 +440,12 @@ export class SkyLayer {
     this.moonOrbitGuide.quaternion.copy(this.starPoints.quaternion);
     this.eclipticBand.quaternion.copy(this.starPoints.quaternion);
     this.eclipticBandFill.quaternion.copy(this.starPoints.quaternion);
+    // The Moon's spin axis is within ~1.5° of the ecliptic pole — use it as
+    // the mesh `up` for the tidally-locked lookAt in updateMoonPlacement.
+    this.moonMesh.up
+      .set(...eclipticNorthEqj())
+      .applyQuaternion(this.starPoints.quaternion)
+      .normalize();
 
     this.placeBody(this.sunDisc, sky.sun);
     const sunGlowDistance = BODY_SHELL_RENDER_RADIUS * 0.98;
@@ -422,6 +518,18 @@ export class SkyLayer {
   ): void {
     const spaceFactor = smoothstepNumber(40_000, 400_000, altitudeM);
 
+    // Sunset/sunrise wayfinding glows: dusk through dawn, ground scales only.
+    const duskFactor = clamp01((4 - sunAltitudeDeg) / 8);
+    const horizonGlowFade = (1 - smoothstepNumber(20_000, 120_000, altitudeM)) * duskFactor;
+    for (const [sprite, strength] of [
+      [this.sunsetGlow, 0.55],
+      [this.sunriseGlow, 0.45],
+    ] as const) {
+      const opacity = this.hasSunHorizonEvents ? horizonGlowFade * strength : 0;
+      sprite.visible = opacity > 0.01;
+      (sprite.material as THREE.SpriteMaterial).opacity = opacity;
+    }
+
     // The sky-shell ecliptic hands off to the heliocentric rings and orbit
     // lines as the physical system fades in.
     const bandOpacity = eclipticBandEnabled ? 0.14 * (1 - systemReveal) : 0;
@@ -449,7 +557,7 @@ export class SkyLayer {
   }
 
   /** Per-frame Moon mesh placement (proxy shell near ground, physical beyond). */
-  updateMoonPlacement(placement: MoonPlacement): void {
+  updateMoonPlacement(placement: MoonPlacement, earthCenterRender?: THREE.Vector3): void {
     const [x, y, z] = placement.rayLocal;
     this.moonMesh.position.set(
       x * placement.renderDistance,
@@ -457,6 +565,13 @@ export class SkyLayer {
       z * placement.renderDistance,
     );
     this.moonMesh.scale.setScalar(Math.max(1e-7, placement.renderRadius));
+    if (earthCenterRender) {
+      // Tidally locked: the map's near side (u = 0.5 → local +X) faces Earth,
+      // with the pole aligned near the ecliptic axis via the mesh `up`
+      // (set each astronomy tick). Libration is ignored (ADR-0009).
+      this.moonMesh.lookAt(earthCenterRender);
+      this.moonMesh.rotateY(-Math.PI / 2);
+    }
   }
 
   /** Replace the Moon orbit guide geometry (EQJ meters, flattened xyz). */

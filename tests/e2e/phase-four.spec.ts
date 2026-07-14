@@ -18,7 +18,7 @@ test("journey reaches the full solar system in the heliocentric domain", async (
   await page.getByRole("button", { name: "Solar system" }).click();
   await expect(page.getByRole("slider", { name: "Distance from the ground" })).toHaveAttribute(
     "aria-valuetext",
-    "Distance from Earth · 53.48 AU",
+    "Distance from Earth · 80.22 AU",
   );
   await expect
     .poll(
@@ -26,7 +26,7 @@ test("journey reaches the full solar system in the heliocentric domain", async (
         Number.parseFloat((await debugValue(page, "Physical distance").textContent()) ?? ""),
       { timeout: 25_000 },
     )
-    .toBeGreaterThan(7.9e12);
+    .toBeGreaterThan(1.19e13);
   await expect(debugValue(page, "Domain")).toHaveText("heliocentric");
 });
 
@@ -42,7 +42,7 @@ test("all ten body markers exist and Pluto is selectable at system scale", async
         Number.parseFloat((await debugValue(page, "Physical distance").textContent()) ?? ""),
       { timeout: 25_000 },
     )
-    .toBeGreaterThan(7.9e12);
+    .toBeGreaterThan(1.19e13);
 
   const pluto = page.locator(".sky-marker[data-body=pluto]");
   await expect(pluto).toBeVisible();
@@ -69,7 +69,7 @@ test("outer-planet markers ride their orbits with the ecliptic plane visible", a
         Number.parseFloat((await debugValue(page, "Physical distance").textContent()) ?? ""),
       { timeout: 25_000 },
     )
-    .toBeGreaterThan(7.9e12);
+    .toBeGreaterThan(1.19e13);
   for (const body of ["jupiter", "saturn", "uranus", "neptune"]) {
     await expect(page.locator(`.sky-marker[data-body=${body}]`)).toBeVisible();
   }

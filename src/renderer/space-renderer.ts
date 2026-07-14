@@ -11,8 +11,14 @@ import {
 import { computeMoonOrbitEqjM, moonGeoEqjM } from "../astronomy/moon-orbit";
 import { eclipticDirectionEqj, eclipticNorthEqj } from "../astronomy/planet-orbits";
 import { type BrightStar, chooseOpeningTarget } from "../astronomy/opening-target";
-import { altAzToLocalThree, computeSkyState, type SkyState } from "../astronomy/sky-state";
+import {
+  altAzToLocalThree,
+  computeSkyState,
+  computeSunHorizonEvents,
+  type SkyState,
+} from "../astronomy/sky-state";
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
+import { formatDistance } from "../camera/distance-format";
 import {
   cameraArcBlendForAltitude,
   earthMoonCompositionForAltitude,
@@ -248,15 +254,18 @@ export class SpaceRenderer {
   private lookTarget: { azimuthDeg: number; altitudeDeg: number } | null = null;
   private lastAstronomyUtcMs = Number.NEGATIVE_INFINITY;
   private lastOrbitUtcMs = Number.NEGATIVE_INFINITY;
+  private lastSunEventsUtcMs = Number.NEGATIVE_INFINITY;
   private moonPlacement: MoonPlacement | null = null;
   private readonly sunDirectionLocal = new THREE.Vector3(0, 1, 0);
   private readonly sunDirectionUniform = uniform(new THREE.Vector3(0, 1, 0));
+  private readonly surfaceFlattenUniform = uniform(1);
   private readonly eclipticNorthLocal = new THREE.Vector3(0, 1, 0);
   private planeGuideAnchors: PlaneGuideAnchor[] = [];
   /** Unit direction from Earth's center to the camera, local frame. */
   private readonly cameraDirLocal = new THREE.Vector3(0, 1, 0);
   private readonly arcQuaternion = new THREE.Quaternion();
   private moonGeoLocalM: Vec3d | null = null;
+  private readoutElement: HTMLElement | null = null;
   private earthGuides: THREE.LineSegments | null = null;
   private slowFrameStreak = 0;
   private adaptiveDprCap = Number.POSITIVE_INFINITY;
@@ -321,6 +330,7 @@ export class SpaceRenderer {
         textures.day,
         textures.night,
         this.sunDirectionUniform,
+        this.surfaceFlattenUniform,
       );
       this.objects.earth.quaternion.copy(
         observerToZenithQuaternion(this.flags.latitudeDeg, this.flags.longitudeDeg),
@@ -494,15 +504,22 @@ export class SpaceRenderer {
       this.lastOrbitUtcMs = utcMs;
       this.skyLayer?.setMoonOrbitGeometry(computeMoonOrbitEqjM(utcMs));
     }
+    // Sunset/sunrise horizon glows drift slowly; refresh every ten minutes.
+    if (Math.abs(utcMs - this.lastSunEventsUtcMs) > 600_000) {
+      this.lastSunEventsUtcMs = utcMs;
+      this.skyLayer?.setSunHorizonEvents(
+        computeSunHorizonEvents(utcMs, this.flags.latitudeDeg, this.flags.longitudeDeg),
+      );
+    }
     const [sunX, sunY, sunZ] = sky.sun.directionLocalThree;
     this.sunDirectionLocal.set(sunX, sunY, sunZ);
     this.sunDirectionUniform.value.set(sunX, sunY, sunZ);
     this.sunAltitudeDeg = sky.sun.altitudeDeg;
     const eclipticNorthLocal = rotateEqjToLocal(sky.eqjToLocalThree, eclipticNorthEqj() as Vec3d);
     this.eclipticNorthLocal.set(...eclipticNorthLocal);
-    // Three "Plane of the solar system" captions spread around the ecliptic;
+    // Four "Plane of the solar system" captions spread around the ecliptic;
     // the overlay projects them each frame and shows whichever face the view.
-    this.planeGuideAnchors = [15, 135, 255].map((longitudeDeg) => ({
+    this.planeGuideAnchors = [10, 100, 190, 280].map((longitudeDeg) => ({
       direction: rotateEqjToLocal(sky.eqjToLocalThree, eclipticDirectionEqj(longitudeDeg) as Vec3d),
       directionAhead: rotateEqjToLocal(
         sky.eqjToLocalThree,
@@ -673,6 +690,10 @@ export class SpaceRenderer {
       orbitLines: layers["orbit-lines"],
       eclipticRings: layers["ecliptic-rings"],
     });
+    // Satellite imagery is below its native resolution close up — hold the
+    // stylized surface until between low orbit and whole Earth.
+    this.surfaceFlattenUniform.value = 1 - smoothstep(800_000, 3_000_000, altitudeM);
+
     const continentReveal = smoothstep(0.3, 0.82, normalizedScale);
     this.objects.continentOutlines.visible = continentReveal > 0.001;
     (this.objects.continentOutlines.material as THREE.LineBasicMaterial).opacity =
@@ -723,7 +744,7 @@ export class SpaceRenderer {
         cameraFromGroundM,
         renderUnitsPerMeter,
       );
-      this.skyLayer?.updateMoonPlacement(this.moonPlacement);
+      this.skyLayer?.updateMoonPlacement(this.moonPlacement, earthCenterRender);
     }
     this.skyLayer?.updateEarthAnchored(earthCenterRender, renderUnitsPerMeter, altitudeM, {
       moonOrbit: layers["moon-orbit"],
@@ -854,6 +875,17 @@ export class SpaceRenderer {
     }
 
     this.renderer.render(this.scene, this.camera);
+
+    // The big distance readout tracks the spring every frame (direct DOM —
+    // React stays out of the frame loop; telemetry keeps the slow fallback).
+    this.readoutElement ??= document.getElementById("scale-readout-value");
+    if (this.readoutElement) {
+      const readoutText = formatDistance(altitudeM);
+      if (this.readoutElement.textContent !== readoutText) {
+        this.readoutElement.textContent = readoutText;
+      }
+    }
+
     const headingDeg = ((-THREE.MathUtils.radToDeg(baseYawRad + this.yawOffset) % 360) + 360) % 360;
     const overrides = new Map<string, MoonMarkerOverride>();
     if (this.moonPlacement) {

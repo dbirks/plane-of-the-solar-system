@@ -48,8 +48,8 @@ export function LayersPanel() {
           </ul>
           <p className="layers-credits">
             Sky data: astronomy-engine (MIT) and the HYG star database (CC BY-SA 4.0). Earth
-            imagery: NASA Blue Marble and Black Marble (NASA Earth Observatory). Place names:
-            GeoNames (CC BY 4.0), matched on-device.
+            imagery: NASA Blue Marble and Black Marble (NASA Earth Observatory). Moon imagery:
+            NASA CGI Moon Kit (LRO). Place names: GeoNames (CC BY 4.0), matched on-device.
           </p>
         </aside>
       )}

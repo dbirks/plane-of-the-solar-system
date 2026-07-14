@@ -42,7 +42,7 @@ for (const line of text.split("\n")) {
   if (!line.trim()) continue;
   const fields = line.split("\t");
   // GeoNames tab layout: 1 name, 4 lat, 5 lon, 7 feature code, 8 country code,
-  // 10 admin1, 14 population.
+  // 10 admin1, 14 population, 16 dem (SRTM elevation, meters).
   const population = Number(fields[14]);
   if (!Number.isFinite(population) || population < MIN_POPULATION) continue;
   // Skip sections/boroughs of a larger city (PPLX: "Mitte" would beat
@@ -54,8 +54,17 @@ for (const line of text.split("\n")) {
   const longitude = Number(fields[5]);
   const country = fields[8];
   const admin1 = country === "US" ? fields[10] : "";
+  const elevation = Number(fields[16]);
   if (!name || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !country) continue;
-  places.push({ name, latitude, longitude, country, admin1, population });
+  places.push({
+    name,
+    latitude,
+    longitude,
+    country,
+    admin1,
+    population,
+    elevation: Number.isFinite(elevation) && elevation > -500 ? Math.round(elevation) : 0,
+  });
 }
 
 // Largest first so ties in distance resolve to the more familiar city.
@@ -73,6 +82,7 @@ const names = places.map((p) => p.name.replaceAll("|", "/")).join("|");
 const regions = places.map((p) => (p.admin1 ? `${p.country}-${p.admin1}` : p.country)).join("|");
 const lat = places.map((p) => p.latitude.toFixed(4)).join(",");
 const lon = places.map((p) => p.longitude.toFixed(4)).join(",");
+const elevation = places.map((p) => p.elevation).join(",");
 
 const body = `
 /** City names, |-separated, aligned with the coordinate arrays. */
@@ -84,6 +94,9 @@ export const PLACE_REGIONS = ${JSON.stringify(regions)};
 export const PLACE_LAT_DEG = new Float32Array([${lat}]);
 
 export const PLACE_LON_DEG = new Float32Array([${lon}]);
+
+/** Ground elevation above sea level (SRTM dem), meters. */
+export const PLACE_ELEVATION_M = new Int16Array([${elevation}]);
 `;
 
 const outPath = join(

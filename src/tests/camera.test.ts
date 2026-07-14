@@ -20,11 +20,11 @@ import {
 describe("logarithmic journey scale", () => {
   it("maps both endpoints exactly", () => {
     expect(sliderToDistance(0)).toBeCloseTo(2, 12);
-    expect(sliderToDistance(1)).toBeCloseTo(8_000_000_000_000, 1);
+    expect(sliderToDistance(1)).toBeCloseTo(12_000_000_000_000, 1);
   });
 
   it("round-trips values", () => {
-    for (const distanceM of [2, 100_000, 500_000, 20_000_000, 500_000_000, 8_000_000_000_000]) {
+    for (const distanceM of [2, 100_000, 500_000, 20_000_000, 500_000_000, 12_000_000_000_000]) {
       // Relative tolerance: absolute float error grows with the magnitude.
       expect(sliderToDistance(distanceToSlider(distanceM)) / distanceM).toBeCloseTo(1, 9);
     }
@@ -40,7 +40,7 @@ describe("logarithmic journey scale", () => {
     expect(distanceToSlider(500_000_000)).toBeCloseTo(0.6, 12);
     expect(JOURNEY_LANDMARKS.at(-1)).toMatchObject({
       id: "full-system",
-      distanceM: 8_000_000_000_000,
+      distanceM: 12_000_000_000_000,
     });
   });
 
@@ -90,16 +90,19 @@ describe("whole-Earth composition", () => {
     expect(journeyCompositionForSlider(1)).toBe(1);
   });
 
-  it("arcs the camera off the zenith between the atmosphere and whole Earth", () => {
+  it("arcs the camera off the zenith between low orbit and whole Earth", () => {
     expect(cameraArcBlendForAltitude(2)).toBe(0);
     expect(cameraArcBlendForAltitude(100_000)).toBe(0);
-    expect(cameraArcBlendForAltitude(500_000)).toBeGreaterThan(0.05);
-    expect(cameraArcBlendForAltitude(500_000)).toBeLessThan(0.5);
+    // Still rising straight up at the low-orbit landmark…
+    expect(cameraArcBlendForAltitude(500_000)).toBe(0);
+    expect(cameraArcBlendForAltitude(2_000_000)).toBeGreaterThan(0.1);
+    expect(cameraArcBlendForAltitude(2_000_000)).toBeLessThan(0.6);
+    // …and fully on the reveal vantage by whole Earth.
     expect(cameraArcBlendForAltitude(20_000_000)).toBe(1);
     expect(cameraArcBlendForAltitude(8_000_000_000_000)).toBe(1);
     // Monotonic through the transition band.
     let previous = 0;
-    for (let exponent = 5.3; exponent <= 7.3; exponent += 0.1) {
+    for (let exponent = 5.7; exponent <= 7.3; exponent += 0.1) {
       const value = cameraArcBlendForAltitude(10 ** exponent);
       expect(value).toBeGreaterThanOrEqual(previous);
       previous = value;

@@ -5,11 +5,11 @@ const fixedScenario =
 
 test("opens at ground scale without a permission prompt", async ({ page }) => {
   await page.goto(fixedScenario);
-  await expect(page.getByRole("heading", { name: "On Earth" })).toBeVisible();
-  // Headless Chromium reports en-US, so the readout is region-detected feet.
+  await expect(page.getByRole("heading", { name: "Ground" })).toBeVisible();
+  // Headless Chromium reports en-US, so the readout is region-detected feet, lifted to the observer's true ground elevation.
   await expect(page.getByRole("slider", { name: "Distance from the ground" })).toHaveAttribute(
     "aria-valuetext",
-    "Altitude · 7 ft",
+    "Altitude · 820 ft",
   );
   await expect(
     page.getByRole("complementary", { name: "Renderer debug information" }).getByText("WebGL 2"),
@@ -32,8 +32,8 @@ test("wheel changes scale and help exposes reduced motion", async ({ page }) => 
   await page.mouse.wheel(0, 700);
   await expect
     .poll(async () => page.getByRole("slider").getAttribute("aria-valuetext"))
-    .not.toBe("Altitude · 7 ft");
-  await page.getByRole("button", { name: "How to move" }).click();
+    .not.toBe("Altitude · 820 ft");
+  await page.getByRole("button", { name: "About & how to move" }).click();
   await expect(page.getByRole("checkbox", { name: "Reduce camera motion" })).toBeVisible();
 });
 

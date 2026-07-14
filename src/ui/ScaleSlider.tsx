@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAppStore } from "../app/app-store";
 import { formatDistance } from "../camera/distance-format";
@@ -6,6 +6,7 @@ import {
   applySoftLandmarkAttraction,
   distanceToSlider,
   JOURNEY_LANDMARKS,
+  nearestLandmark,
   sliderToDistance,
 } from "../camera/scale-domains";
 
@@ -15,14 +16,20 @@ export function ScaleSlider() {
   const currentDistanceM = useAppStore((state) => state.telemetry.currentDistanceM);
   const normalizedTarget = distanceToSlider(targetDistanceM);
 
-  const currentLandmark = useMemo(() => {
-    return JOURNEY_LANDMARKS.reduce((closest, candidate) =>
-      Math.abs(Math.log(candidate.distanceM) - Math.log(currentDistanceM)) <
-      Math.abs(Math.log(closest.distanceM) - Math.log(currentDistanceM))
-        ? candidate
-        : closest,
-    );
-  }, [currentDistanceM]);
+  // Landmark labels surface only while actively traveling (or hovering the
+  // rail, via CSS) and fade back out shortly after arriving.
+  const [railActive, setRailActive] = useState(true);
+  const hideTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    setRailActive(true);
+    if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = window.setTimeout(() => setRailActive(false), 1_800);
+    return () => {
+      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+    };
+  }, [targetDistanceM]);
+
+  const currentLandmark = useMemo(() => nearestLandmark(currentDistanceM), [currentDistanceM]);
 
   const updateScale = (normalized: number, attract: boolean) => {
     const adjusted = attract ? applySoftLandmarkAttraction(normalized) : normalized;
@@ -30,10 +37,15 @@ export function ScaleSlider() {
   };
 
   return (
-    <section className="scale-control" aria-label="Journey scale">
+    <section
+      className={`scale-control${railActive ? " scale-control--active" : ""}`}
+      aria-label="Journey scale"
+    >
       <div className="scale-readout" aria-live="polite">
         <span className="eyebrow">{currentLandmark.label}</span>
-        <strong>{formatDistance(currentDistanceM)}</strong>
+        {/* The renderer refreshes this text every frame by id — React only
+            provides the fallback cadence. */}
+        <strong id="scale-readout-value">{formatDistance(currentDistanceM)}</strong>
       </div>
       <div className="slider-assembly">
         <input

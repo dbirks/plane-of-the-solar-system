@@ -8,6 +8,7 @@ import {
   MoonPhase,
   Observer,
   Rotation_EQJ_HOR,
+  SearchRiseSet,
 } from "astronomy-engine";
 
 import { horizonToLocalThree } from "../coordinates/transforms";
@@ -101,6 +102,39 @@ const BODY_DEFINITIONS: readonly BodyDefinition[] = [
   { id: "neptune", label: "Neptune", body: Body.Neptune, radiusM: 24_622_000 },
   { id: "pluto", label: "Pluto", body: Body.Pluto, radiusM: 1_188_300 },
 ];
+
+export type SunHorizonEvents = {
+  /** Azimuth where the Sun last set / will set (degrees, north→east). */
+  setAzimuthDeg: number;
+  /** Azimuth where the Sun will rise / last rose. */
+  riseAzimuthDeg: number;
+};
+
+/**
+ * Where on the horizon the Sun sets and rises around `utcMs` — the nearest
+ * set within the past day and the nearest rise within the coming day (or the
+ * reverse when the search finds them the other way round). Null in polar
+ * day/night when no event occurs within the window.
+ */
+export function computeSunHorizonEvents(
+  utcMs: number,
+  observerLatitudeDeg: number,
+  observerLongitudeDeg: number,
+): SunHorizonEvents | null {
+  const observer = new Observer(observerLatitudeDeg, observerLongitudeDeg, 0);
+  // Search backward half a day so "where the sun went down" points at the
+  // most recent sunset through the night.
+  const searchStart = MakeTime(new Date(utcMs - 43_200_000));
+  const setEvent = SearchRiseSet(Body.Sun, observer, -1, searchStart, 1.5);
+  const riseEvent = SearchRiseSet(Body.Sun, observer, +1, searchStart, 1.5);
+  if (!setEvent || !riseEvent) return null;
+
+  const azimuthAt = (time: ReturnType<typeof MakeTime>) => {
+    const equatorial = Equator(Body.Sun, time, observer, true, true);
+    return Horizon(time, observer, equatorial.ra, equatorial.dec, "normal").azimuth;
+  };
+  return { setAzimuthDeg: azimuthAt(setEvent), riseAzimuthDeg: azimuthAt(riseEvent) };
+}
 
 /** Convert an alt-az direction (degrees, azimuth from north toward east) to a local-Three unit vector. */
 export function altAzToLocalThree(altitudeDeg: number, azimuthDeg: number): Vec3d {

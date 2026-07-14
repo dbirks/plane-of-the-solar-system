@@ -7,6 +7,9 @@ describe("nearestPlace (offline GeoNames subset)", () => {
     const place = nearestPlace(39.7684, -86.1581);
     expect(place?.label).toBe("Indianapolis, IN");
     expect(place?.distanceKm).toBeLessThan(20);
+    // SRTM ground elevation rides along for true altitude readouts.
+    expect(place?.elevationM).toBeGreaterThan(180);
+    expect(place?.elevationM).toBeLessThan(300);
   });
 
   it("labels non-US cities with the country name", () => {

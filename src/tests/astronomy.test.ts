@@ -1,7 +1,7 @@
 import { Body, Equator, MakeTime, Observer } from "astronomy-engine";
 import { describe, expect, it } from "vitest";
 
-import { altAzToLocalThree, computeSkyState } from "../astronomy/sky-state";
+import { altAzToLocalThree, computeSkyState, computeSunHorizonEvents } from "../astronomy/sky-state";
 import type { Vec3d } from "../coordinates/vec3d";
 import {
   referenceMoonAltAz,
@@ -177,5 +177,25 @@ describe("computeSkyState against independent Meeus reference (frames: HOR geome
       expect(Number.isFinite(planet.magnitude)).toBe(true);
       expect(planet.distanceM).toBeGreaterThan(0.2 * 1.496e11);
     }
+  });
+});
+
+describe("computeSunHorizonEvents (azimuth degrees, north→east)", () => {
+  it("puts July sunset in the northwest and sunrise in the northeast at mid-northern latitude", () => {
+    const events = computeSunHorizonEvents(
+      Date.parse("2026-07-24T02:30:00Z"),
+      39.7684,
+      -86.1581,
+    );
+    expect(events).not.toBeNull();
+    // Summer sun sets north of due west and rises north of due east.
+    expect(events!.setAzimuthDeg).toBeGreaterThan(280);
+    expect(events!.setAzimuthDeg).toBeLessThan(320);
+    expect(events!.riseAzimuthDeg).toBeGreaterThan(40);
+    expect(events!.riseAzimuthDeg).toBeLessThan(80);
+  });
+
+  it("returns null in polar day", () => {
+    expect(computeSunHorizonEvents(Date.parse("2026-06-21T12:00:00Z"), 80, 0)).toBeNull();
   });
 });

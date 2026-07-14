@@ -15,13 +15,13 @@ function debugValue(page: import("@playwright/test").Page, label: string) {
 test("Earth imagery loads asynchronously without blocking the opening", async ({ page }) => {
   await page.goto(fixedScenario);
   // Opening is immediate (no permission prompt, no loading gate)…
-  await expect(page.getByRole("heading", { name: "On Earth" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ground" })).toBeVisible();
   // …and the two NASA textures arrive afterwards (3 base + day + night = 5).
   await expect
     .poll(async () => (await debugValue(page, "GPU resources").textContent()) ?? "", {
       timeout: 20_000,
     })
-    .toContain("5 tex");
+    .toContain("6 tex");
 });
 
 test("layers panel toggles explanation geometry and documents credits", async ({ page }) => {
@@ -56,7 +56,7 @@ test("marker labels declutter when bodies crowd together", async ({ page }) => {
 
 test("reduced motion preference is exposed and honored in settings", async ({ page }) => {
   await page.goto(fixedScenario);
-  await page.getByRole("button", { name: "How to move" }).click();
+  await page.getByRole("button", { name: "About & how to move" }).click();
   const checkbox = page.getByRole("checkbox", { name: "Reduce camera motion" });
   await checkbox.check();
   await expect(checkbox).toBeChecked();

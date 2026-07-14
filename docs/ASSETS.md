@@ -41,3 +41,13 @@ Both textures load asynchronously after the opening scene; the code-native flat-
 - **License:** CC BY 4.0
 - **Processing:** `scripts/generate-place-catalog.mjs` → committed `src/location/place-catalog.ts` (name, coordinates, country/US-state); no network at build or runtime
 - **Use:** the observer chip shows "Near <city>" instead of raw coordinates — a coarse, privacy-friendly offline anchor (nothing ever leaves the device)
+
+## Moon imagery (round 4)
+
+- **Asset:** NASA CGI Moon Kit color map (LRO LROC WAC + poles), `lroc_color_poles_4k.tif`
+- **Source:** <https://svs.gsfc.nasa.gov/4720> (NASA Scientific Visualization Studio)
+- **Author:** NASA's Scientific Visualization Studio (Ernie Wright), from Lunar Reconnaissance Orbiter data
+- **License:** NASA imagery — free for public use with attribution
+- **Processing:** resized to 2048×1024, JPEG quality 82 via ImageMagick
+- **Output path:** `public/textures/moon-lroc-2048.jpg` (330 KB)
+- **Use:** albedo on the physically-lit Moon mesh (terminator stays true geometry); flat shading remains the fallback. Tidally-locked orientation, libration ignored (ADR-0009).

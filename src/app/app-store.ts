@@ -79,6 +79,8 @@ type AppState = {
   compassHeadingDeg: number | null;
   /** Live device pitch (0 horizon, +90 zenith), or null when unavailable. */
   compassPitchDeg: number | null;
+  /** True while the shared phone-look session streams device orientation. */
+  phoneLookActive: boolean;
   reducedMotion: boolean;
   setTargetDistanceM: (distanceM: number) => void;
   setTelemetry: (telemetry: RendererTelemetry) => void;
@@ -87,6 +89,7 @@ type AppState = {
   setSelectedBodyId: (bodyId: SkyBodyId | null) => void;
   setLayer: (layer: LayerId, enabled: boolean) => void;
   setCompassLook: (headingDeg: number | null, pitchDeg: number | null) => void;
+  setPhoneLookActive: (active: boolean) => void;
   setReducedMotion: (enabled: boolean) => void;
 };
 
@@ -116,6 +119,7 @@ export const useAppStore = create<AppState>((set) => ({
   layers: DEFAULT_LAYERS,
   compassHeadingDeg: null,
   compassPitchDeg: null,
+  phoneLookActive: false,
   reducedMotion:
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   setTargetDistanceM: (targetDistanceM) => set({ targetDistanceM }),
@@ -126,5 +130,6 @@ export const useAppStore = create<AppState>((set) => ({
   setLayer: (layer, enabled) => set((state) => ({ layers: { ...state.layers, [layer]: enabled } })),
   setCompassLook: (compassHeadingDeg, compassPitchDeg) =>
     set({ compassHeadingDeg, compassPitchDeg }),
+  setPhoneLookActive: (phoneLookActive) => set({ phoneLookActive }),
   setReducedMotion: (reducedMotion) => set({ reducedMotion }),
 }));

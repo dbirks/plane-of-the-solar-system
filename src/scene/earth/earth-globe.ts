@@ -11,13 +11,19 @@ export function createEarthGlobeMaterial(
   dayTexture: THREE.Texture,
   nightTexture: THREE.Texture,
   sunDirectionNode: Parameters<typeof dot>[1],
+  surfaceFlattenNode: Parameters<typeof mix>[2],
 ): THREE.MeshBasicNodeMaterial {
   const material = new THREE.MeshBasicNodeMaterial();
   const lit = clamp(add(mul(dot(normalWorld, sunDirectionNode), 3.5), 0.12), 0, 1);
   const dayColor = texture(dayTexture);
   const nightColor = texture(nightTexture);
   const nightGlow = add(mul(nightColor, vec3(1.2, 1.0, 0.72)), mul(dayColor, vec3(0.05)));
-  material.colorNode = mix(nightGlow, dayColor, lit);
+  const texturedColor = mix(nightGlow, dayColor, lit);
+  // Up close the imagery is below its native resolution and reads as blur —
+  // `surfaceFlattenNode` (1 near the ground, 0 past low orbit) swaps in a
+  // clean stylized tone, still shaded by the same physical terminator.
+  const flatColor = mix(vec3(0.008, 0.016, 0.026), vec3(0.1, 0.17, 0.22), lit);
+  material.colorNode = mix(texturedColor, flatColor, surfaceFlattenNode);
   return material;
 }
 

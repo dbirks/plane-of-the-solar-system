@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 
 import { type FeatureFlags, readFeatureFlags } from "./feature-flags";
-import { setActiveDistanceUnit } from "../camera/distance-format";
+import { setActiveDistanceUnit, setGroundElevationM } from "../camera/distance-format";
+import { nearestLandmark } from "../camera/scale-domains";
+import { nearestPlace } from "../location/nearest-place";
 import { resolveObserverLocation } from "../location/observer-location";
 import { SpaceRenderer } from "../renderer/space-renderer";
 import { BodyInset } from "../ui/BodyInset";
 import { CompassRibbon } from "../ui/CompassRibbon";
 import { LayersPanel } from "../ui/LayersPanel";
 import { DebugPanel } from "../ui/DebugPanel";
+import { INTRO_STORAGE_KEY, IntroDialog } from "../ui/IntroDialog";
 import { MoonInset } from "../ui/MoonInset";
 import { ObserverChip } from "../ui/ObserverChip";
 import { ScaleSlider } from "../ui/ScaleSlider";
@@ -20,16 +23,27 @@ const flags: FeatureFlags = {
   longitudeDeg: observer.longitudeDeg,
 };
 setActiveDistanceUnit(flags.distanceUnit);
+setGroundElevationM(nearestPlace(observer.latitudeDeg, observer.longitudeDeg)?.elevationM ?? 0);
+
+// The intro greets plain first visits; reproducible capture URLs (?time/?lat)
+// and returning visitors go straight to the sky.
+function introDismissed(): boolean {
+  try {
+    return window.localStorage.getItem(INTRO_STORAGE_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+const showIntroInitially = !flags.hasExplicitTime && observer.source !== "url" && !introDismissed();
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const [rendererError, setRendererError] = useState<string | null>(null);
-  const [showHelp, setShowHelp] = useState(false);
-  const reducedMotion = useAppStore((state) => state.reducedMotion);
-  const setReducedMotion = useAppStore((state) => state.setReducedMotion);
+  const [showIntro, setShowIntro] = useState(showIntroInitially);
   const telemetry = useAppStore((state) => state.telemetry);
   const openingTargetLabel = useAppStore((state) => state.openingTargetLabel);
+  const currentLandmarkLabel = nearestLandmark(telemetry.currentDistanceM).label;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -52,14 +66,19 @@ export function App() {
       />
       <header className="app-header">
         <div>
-          <span className="brand-kicker">A change of scale</span>
-          <h1>On Earth</h1>
+          <span className="brand-kicker">Plane of the solar system</span>
+          <h1>{currentLandmarkLabel}</h1>
         </div>
         <div className="header-actions">
           <span className="backend-pill">{telemetry.backend}</span>
           <LayersPanel />
-          <button type="button" className="quiet-button" onClick={() => setShowHelp(!showHelp)}>
-            {showHelp ? "Close" : "How to move"}
+          <button
+            type="button"
+            className="quiet-button"
+            aria-label="About & how to move"
+            onClick={() => setShowIntro(true)}
+          >
+            ?
           </button>
         </div>
       </header>
@@ -72,20 +91,7 @@ export function App() {
       <BodyInset />
       <DebugPanel flags={flags} />
 
-      {showHelp && (
-        <aside className="help-card">
-          <span className="eyebrow">Explore freely</span>
-          <p>Drag the sky to look around. Scroll or use the scale control to leave the surface.</p>
-          <label>
-            <input
-              type="checkbox"
-              checked={reducedMotion}
-              onChange={(event) => setReducedMotion(event.currentTarget.checked)}
-            />
-            Reduce camera motion
-          </label>
-        </aside>
-      )}
+      <IntroDialog open={showIntro} onClose={() => setShowIntro(false)} />
 
       <p className="nonvisual-summary" aria-live="polite">
         Current scale domain: {telemetry.scaleDomain}. Renderer: {telemetry.backend}.

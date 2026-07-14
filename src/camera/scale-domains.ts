@@ -17,7 +17,9 @@ export type ScaleLandmark = {
 };
 
 export const JOURNEY_MIN_DISTANCE_M = 2;
-export const JOURNEY_MAX_DISTANCE_M = 8_000_000_000_000;
+// ~80 AU: far enough that Pluto's whole orbit (aphelion 49 AU) sits inside
+// the final frame with margin.
+export const JOURNEY_MAX_DISTANCE_M = 12_000_000_000_000;
 
 // The atmosphere → whole-Earth leg is deliberately quick (little to see while
 // the ground blurs away below); the majority of the slider belongs to the
@@ -84,6 +86,17 @@ export function applySoftLandmarkAttraction(normalizedValue: number): number {
   }
 
   return Math.min(1, Math.max(0, attracted));
+}
+
+/** The landmark nearest to a distance in log space (for titles and readouts). */
+export function nearestLandmark(distanceM: number): ScaleLandmark {
+  const safeDistance = Math.max(1, distanceM);
+  return JOURNEY_LANDMARKS.reduce((closest, candidate) =>
+    Math.abs(Math.log(candidate.distanceM) - Math.log(safeDistance)) <
+    Math.abs(Math.log(closest.distanceM) - Math.log(safeDistance))
+      ? candidate
+      : closest,
+  );
 }
 
 export function scaleDomainForDistance(distanceM: number): ScaleDomain {

@@ -1,4 +1,11 @@
-import { PLACE_COUNT, PLACE_LAT_DEG, PLACE_LON_DEG, PLACE_NAMES, PLACE_REGIONS } from "./place-catalog";
+import {
+  PLACE_COUNT,
+  PLACE_ELEVATION_M,
+  PLACE_LAT_DEG,
+  PLACE_LON_DEG,
+  PLACE_NAMES,
+  PLACE_REGIONS,
+} from "./place-catalog";
 
 const DEG = Math.PI / 180;
 const EARTH_RADIUS_KM = 6371;
@@ -13,6 +20,8 @@ export type NearestPlace = {
   /** e.g. "Indianapolis, IN" or "Berlin, Germany". */
   label: string;
   distanceKm: number;
+  /** Ground elevation above sea level at the anchor city, meters. */
+  elevationM: number;
 };
 
 function regionLabel(region: string): string {
@@ -55,5 +64,6 @@ export function nearestPlace(latitudeDeg: number, longitudeDeg: number): Nearest
   return {
     label: `${names[bestIndex]!}, ${regionLabel(regions[bestIndex]!)}`,
     distanceKm,
+    elevationM: PLACE_ELEVATION_M[bestIndex] ?? 0,
   };
 }

@@ -100,7 +100,8 @@ export function MoonInset() {
         </dl>
       </div>
       <p className="moon-inset-note">
-        True size and distance stay in the main view; this close-up is labeled UI, not the scene.
+        A close-up for reading the phase — out in the sky, the Moon keeps its true size and
+        distance.
       </p>
     </aside>
   );

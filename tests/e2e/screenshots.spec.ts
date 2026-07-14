@@ -15,7 +15,7 @@ const landmarks = [
 test("captures fixed Phase 1 landmarks", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await page.goto(fixedScenario);
-  await expect(page.getByRole("heading", { name: "On Earth" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ground" })).toBeVisible();
   await expect(page.getByText(/Renderer: WebGL 2/)).toBeAttached();
   const slider = page.getByRole("slider", { name: "Distance from the ground" });
 

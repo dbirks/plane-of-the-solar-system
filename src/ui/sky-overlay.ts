@@ -303,7 +303,7 @@ export class SkyOverlay {
       caption.style.opacity = opacity.toFixed(3);
       caption.style.transform =
         `translate(${screenX.toFixed(1)}px, ${screenY.toFixed(1)}px) ` +
-        `rotate(${uprightDeg.toFixed(2)}deg) translate(-50%, -170%)`;
+        `rotate(${uprightDeg.toFixed(2)}deg) translate(-50%, -50%)`;
     }
   }
 
