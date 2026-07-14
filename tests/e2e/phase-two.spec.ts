@@ -24,7 +24,7 @@ test("opening camera faces the Moon chosen by the deterministic scoring", async 
   await expect
     .poll(async () => Number.parseFloat((await debugValue(page, "Heading").textContent()) ?? ""))
     .toBeLessThan(201);
-  await expect(page.getByRole("button", { name: /Facing the Moon/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Near Indianapolis, IN/ })).toBeVisible();
 });
 
 test("astronomy readouts match the fixed scenario", async ({ page }) => {
@@ -113,7 +113,7 @@ test("location panel offers manual and device location without any opening promp
   page,
 }) => {
   await page.goto(moonScenario);
-  await page.getByRole("button", { name: /Facing the Moon/ }).click();
+  await page.getByRole("button", { name: /Near Indianapolis, IN/ }).click();
   await expect(page.getByLabel("Latitude in degrees")).toHaveValue("39.7684");
   await expect(page.getByLabel("Longitude in degrees")).toHaveValue("-86.1581");
   await expect(page.getByRole("button", { name: "Use my location" })).toBeVisible();

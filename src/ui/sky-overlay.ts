@@ -19,6 +19,8 @@ export type MoonMarkerOverride = {
   altitudeDeg: number;
   azimuthDeg: number;
   physical: boolean;
+  /** Apparent angular radius from the camera — a resolved body needs no dot. */
+  apparentRadiusDeg: number;
 };
 
 type MarkerEntry = {
@@ -87,7 +89,7 @@ export class SkyOverlay {
         element.className = "sky-marker";
         element.dataset["body"] = body.id;
         const ring = document.createElement("span");
-        ring.className = "sky-marker-ring";
+        ring.className = "sky-marker-dot";
         const label = document.createElement("span");
         label.className = "sky-marker-label";
         label.textContent = body.label;
@@ -171,6 +173,9 @@ export class SkyOverlay {
           entry.lookAzimuthDeg = override.azimuthDeg;
           if (override.physical) entry.element.classList.remove("sky-marker--ghost");
         }
+        const apparentRadiusDeg = override
+          ? override.apparentRadiusDeg
+          : (Math.asin(Math.min(1, entry.body.radiusM / entry.body.distanceM)) * 180) / Math.PI;
 
         const [x, y, z] = direction;
         // View space first: points behind the camera mirror through the
@@ -203,8 +208,19 @@ export class SkyOverlay {
         }
         if (entry.element.style.display === "none") entry.element.style.display = "";
         entry.element.classList.toggle("sky-marker--edge", atEdge);
+        // A body whose disc is plainly visible on screen needs no dot — the
+        // label alone tags it (no circle around the whole Earth or near Moon).
+        // Edge-pinned markers keep the dot: the disc itself is out of view.
+        const resolved =
+          apparentRadiusDeg > 0.175 &&
+          !atEdge &&
+          !entry.element.classList.contains("sky-marker--ghost");
+        entry.element.classList.toggle("sky-marker--resolved", resolved);
         const screenX = ((ndcX + 1) / 2) * width;
         const screenY = ((1 - ndcY) / 2) * height;
+        // Near the bottom of the frame the label flips above the dot so it
+        // stays readable (edge-pinned markers there would otherwise clip).
+        entry.element.classList.toggle("sky-marker--label-above", screenY > height - 64);
         entry.screenX = screenX;
         entry.screenY = screenY;
         entry.visible = true;
@@ -237,6 +253,14 @@ export class SkyOverlay {
       // Strip coordinates place azimuth -180° at x = 0.
       const offset = centerPx - (headingDeg + 180) * pxPerDeg;
       strip.style.transform = `translateX(${offset.toFixed(1)}px)`;
+      // Cardinal directions stop meaning anything once the camera has arced
+      // off the ground view toward the whole planet.
+      const ribbon = window.parentElement;
+      if (ribbon) {
+        const ribbonFade = 1 - smoothstepNumber(1e6, 6e6, altitudeM);
+        ribbon.style.opacity = ribbonFade.toFixed(3);
+        ribbon.style.visibility = ribbonFade > 0.01 ? "" : "hidden";
+      }
     }
   }
 
@@ -304,7 +328,12 @@ export class SkyOverlay {
       }
       this.workVector.applyMatrix4(camera.projectionMatrix);
       this.workVectorAhead.applyMatrix4(camera.projectionMatrix);
-      if (Math.abs(this.workVector.x) > 0.92 || Math.abs(this.workVector.y) > 0.86) {
+      // The caption is wide, so its anchor may sit past the screen edge while
+      // text is still visible: ease out instead of popping at the edge.
+      const edgeFade =
+        (1 - smoothstepNumber(1.05, 1.35, Math.abs(this.workVector.x))) *
+        (1 - smoothstepNumber(1.0, 1.25, Math.abs(this.workVector.y)));
+      if (edgeFade <= 0.02) {
         caption.style.display = "none";
         continue;
       }
@@ -316,7 +345,7 @@ export class SkyOverlay {
       // Keep the text upright: flip when the band runs right-to-left.
       const uprightDeg = slopeDeg > 90 ? slopeDeg - 180 : slopeDeg < -90 ? slopeDeg + 180 : slopeDeg;
       caption.style.display = "";
-      caption.style.opacity = opacity.toFixed(3);
+      caption.style.opacity = (opacity * edgeFade).toFixed(3);
       caption.style.transform =
         `translate(${screenX.toFixed(1)}px, ${screenY.toFixed(1)}px) ` +
         `rotate(${uprightDeg.toFixed(2)}deg) translate(-50%, -50%)`;

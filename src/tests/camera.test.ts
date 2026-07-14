@@ -92,21 +92,24 @@ describe("whole-Earth composition", () => {
     expect(journeyCompositionForSlider(1)).toBe(1);
   });
 
-  it("arcs the camera off the zenith between low orbit and whole Earth", () => {
+  it("arcs the camera off the zenith between the atmosphere and whole Earth", () => {
     expect(cameraArcBlendForAltitude(2)).toBe(0);
     expect(cameraArcBlendForAltitude(100_000)).toBe(0);
-    // Still rising straight up at the low-orbit landmark…
-    expect(cameraArcBlendForAltitude(500_000)).toBe(0);
-    expect(cameraArcBlendForAltitude(2_000_000)).toBeGreaterThan(0.1);
-    expect(cameraArcBlendForAltitude(2_000_000)).toBeLessThan(0.6);
+    // One continuous motion with the roll: already turning through low orbit
+    // (nothing new starts there)…
+    expect(cameraArcBlendForAltitude(500_000)).toBeGreaterThan(0.1);
+    expect(cameraArcBlendForAltitude(500_000)).toBeLessThan(0.5);
+    expect(cameraArcBlendForAltitude(2_000_000)).toBeGreaterThan(0.3);
+    expect(cameraArcBlendForAltitude(2_000_000)).toBeLessThan(0.9);
     // …and fully on the reveal vantage by whole Earth.
     expect(cameraArcBlendForAltitude(20_000_000)).toBe(1);
     expect(cameraArcBlendForAltitude(8_000_000_000_000)).toBe(1);
-    // Monotonic through the transition band.
+    // Monotonic through the transition band, and in lockstep with the roll.
     let previous = 0;
-    for (let exponent = 5.7; exponent <= 7.3; exponent += 0.1) {
+    for (let exponent = 5; exponent <= 7.3; exponent += 0.1) {
       const value = cameraArcBlendForAltitude(10 ** exponent);
       expect(value).toBeGreaterThanOrEqual(previous);
+      expect(value).toBeCloseTo(eclipticRollBlendForAltitude(10 ** exponent), 10);
       previous = value;
     }
   });

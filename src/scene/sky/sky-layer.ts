@@ -201,9 +201,11 @@ export class SkyLayer {
   private readonly sunDirectionGuide: THREE.LineSegments;
   private readonly eclipticBand: THREE.LineSegments;
   private readonly eclipticBandFill: THREE.Mesh;
+  private readonly eclipticBandBelow: THREE.LineSegments;
+  private readonly bandDashPaths: readonly [Float32Array, Float32Array];
   private readonly sunsetGlow: THREE.Mesh;
   private readonly sunriseGlow: THREE.Mesh;
-  private hasSunHorizonEvents = false;
+  private sunEvents: SunHorizonEvents | null = null;
 
   constructor() {
     this.starPoints = buildStarField(1);
@@ -288,6 +290,48 @@ export class SkyLayer {
     this.eclipticBandFill.renderOrder = -4;
     this.eclipticBandFill.frustumCulled = false;
     this.eclipticBandFill.visible = false;
+
+    // Below the horizon the band continues as dotted edge lines drawn through
+    // the ground (depth test off), so the plane visibly loops the whole sky.
+    // Dashes come from emitting every third high-resolution segment — the
+    // WebGPU-flavored renderer has no dependable dashed-line material.
+    const dashSampleCount = 720;
+    const dashDirections = computeEclipticRingEqjM(1, dashSampleCount);
+    const dashPaths = [new Float32Array(dashSampleCount * 3), new Float32Array(dashSampleCount * 3)];
+    for (let i = 0; i < dashSampleCount; i += 1) {
+      const x = dashDirections[i * 3]!;
+      const y = dashDirections[i * 3 + 1]!;
+      const z = dashDirections[i * 3 + 2]!;
+      const length = Math.hypot(x, y, z) || 1;
+      for (const [path, sign] of [
+        [dashPaths[0]!, 1],
+        [dashPaths[1]!, -1],
+      ] as const) {
+        path[i * 3] = ((x / length) * cosHalf + north[0] * sinHalf * sign) * bandRadius;
+        path[i * 3 + 1] = ((y / length) * cosHalf + north[1] * sinHalf * sign) * bandRadius;
+        path[i * 3 + 2] = ((z / length) * cosHalf + north[2] * sinHalf * sign) * bandRadius;
+      }
+    }
+    this.bandDashPaths = [dashPaths[0]!, dashPaths[1]!];
+    const belowGeometry = new THREE.BufferGeometry();
+    belowGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(dashSampleCount * 2 * 6), 3),
+    );
+    belowGeometry.setDrawRange(0, 0);
+    this.eclipticBandBelow = new THREE.LineSegments(
+      belowGeometry,
+      new THREE.LineBasicMaterial({
+        color: 0x7fb4b8,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        depthTest: false,
+      }),
+    );
+    this.eclipticBandBelow.renderOrder = 3;
+    this.eclipticBandBelow.frustumCulled = false;
+    this.eclipticBandBelow.visible = false;
 
     // Earth-anchored guides: geometry lives in EQJ meters (orbit) or local
     // meters (sun ray); per frame they are positioned at the Earth's render
@@ -393,14 +437,53 @@ export class SkyLayer {
       this.sunDirectionGuide,
       this.eclipticBand,
       this.eclipticBandFill,
+      this.eclipticBandBelow,
       this.sunsetGlow,
       this.sunriseGlow,
     );
   }
 
+  /**
+   * Refill the dotted below-horizon band from the current sky rotation:
+   * every third high-res segment whose endpoints both sit below the local
+   * horizon (object-space dot with the zenith transformed into EQJ).
+   */
+  private rebuildBelowHorizonBand(): void {
+    const inverse = this.eclipticBandBelow.quaternion.clone().invert();
+    const zenithObject = new THREE.Vector3(0, 1, 0).applyQuaternion(inverse);
+    const geometry = this.eclipticBandBelow.geometry;
+    const positions = geometry.getAttribute("position") as THREE.BufferAttribute;
+    const target = positions.array as Float32Array;
+    let vertexCount = 0;
+    for (const path of this.bandDashPaths) {
+      const samples = path.length / 3;
+      for (let i = 0; i < samples; i += 3) {
+        const next = (i + 1) % samples;
+        const ax = path[i * 3]!;
+        const ay = path[i * 3 + 1]!;
+        const az = path[i * 3 + 2]!;
+        const bx = path[next * 3]!;
+        const by = path[next * 3 + 1]!;
+        const bz = path[next * 3 + 2]!;
+        const aBelow = ax * zenithObject.x + ay * zenithObject.y + az * zenithObject.z < 0;
+        const bBelow = bx * zenithObject.x + by * zenithObject.y + bz * zenithObject.z < 0;
+        if (!aBelow || !bBelow) continue;
+        target[vertexCount * 3] = ax;
+        target[vertexCount * 3 + 1] = ay;
+        target[vertexCount * 3 + 2] = az;
+        target[vertexCount * 3 + 3] = bx;
+        target[vertexCount * 3 + 4] = by;
+        target[vertexCount * 3 + 5] = bz;
+        vertexCount += 2;
+      }
+    }
+    geometry.setDrawRange(0, vertexCount);
+    positions.needsUpdate = true;
+  }
+
   /** Place the sunset/sunrise horizon glows (recomputed every few minutes). */
   setSunHorizonEvents(events: SunHorizonEvents | null): void {
-    this.hasSunHorizonEvents = events !== null;
+    this.sunEvents = events;
     if (!events) return;
     for (const [quad, azimuthDeg] of [
       [this.sunsetGlow, events.setAzimuthDeg],
@@ -451,6 +534,8 @@ export class SkyLayer {
     this.moonOrbitGuide.quaternion.copy(this.starPoints.quaternion);
     this.eclipticBand.quaternion.copy(this.starPoints.quaternion);
     this.eclipticBandFill.quaternion.copy(this.starPoints.quaternion);
+    this.eclipticBandBelow.quaternion.copy(this.starPoints.quaternion);
+    this.rebuildBelowHorizonBand();
     // The Moon's spin axis is within ~1.5° of the ecliptic pole — use it as
     // the mesh `up` for the tidally-locked lookAt in updateMoonPlacement.
     this.moonMesh.up
@@ -524,19 +609,28 @@ export class SkyLayer {
   updateAltitude(
     altitudeM: number,
     sunAltitudeDeg: number,
+    utcMs: number,
     systemReveal = 0,
     eclipticBandEnabled = true,
   ): void {
     const spaceFactor = smoothstepNumber(40_000, 400_000, altitudeM);
 
-    // Sunset/sunrise wayfinding glows: dusk through dawn, ground scales only.
-    const duskFactor = clamp01((4 - sunAltitudeDeg) / 8);
-    const horizonGlowFade = (1 - smoothstepNumber(20_000, 120_000, altitudeM)) * duskFactor;
-    for (const [quad, strength] of [
-      [this.sunsetGlow, 0.55],
-      [this.sunriseGlow, 0.45],
+    // Each horizon glow keeps to its own event: the sunset glow from about
+    // half an hour before sunset to an hour after, the sunrise glow from an
+    // hour before sunrise to half an hour after, with soft shoulders.
+    const groundFade = 1 - smoothstepNumber(20_000, 120_000, altitudeM);
+    const glowWindow = (eventUtcMs: number, beforeMin: number, afterMin: number) => {
+      const minutes = (utcMs - eventUtcMs) / 60_000;
+      return (
+        smoothstepNumber(-beforeMin - 15, -beforeMin, minutes) *
+        (1 - smoothstepNumber(afterMin, afterMin + 15, minutes))
+      );
+    };
+    for (const [quad, strength, window] of [
+      [this.sunsetGlow, 0.55, this.sunEvents ? glowWindow(this.sunEvents.setUtcMs, 30, 60) : 0],
+      [this.sunriseGlow, 0.45, this.sunEvents ? glowWindow(this.sunEvents.riseUtcMs, 60, 30) : 0],
     ] as const) {
-      const opacity = this.hasSunHorizonEvents ? horizonGlowFade * strength : 0;
+      const opacity = groundFade * window * strength;
       quad.visible = opacity > 0.01;
       (quad.material as THREE.MeshBasicMaterial).opacity = opacity;
     }
@@ -548,6 +642,11 @@ export class SkyLayer {
     (this.eclipticBand.material as THREE.LineBasicMaterial).opacity = bandOpacity;
     this.eclipticBandFill.visible = bandOpacity > 0.003;
     (this.eclipticBandFill.material as THREE.MeshBasicMaterial).opacity = bandOpacity * 0.3;
+    // The dotted continuation matters while the ground hides the lower sky;
+    // it hands off as the ground itself fades from view.
+    const belowOpacity = bandOpacity * groundFade;
+    this.eclipticBandBelow.visible = belowOpacity > 0.003;
+    (this.eclipticBandBelow.material as THREE.LineBasicMaterial).opacity = belowOpacity;
     const groundStarOpacity = clamp01((-sunAltitudeDeg - 3) / 11);
     const starOpacity = Math.max(groundStarOpacity, spaceFactor * 0.85);
     this.setPointsOpacity(this.starPoints, starOpacity);

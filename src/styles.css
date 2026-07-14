@@ -125,6 +125,10 @@ input:focus-visible {
   backdrop-filter: blur(12px);
 }
 
+.quiet-button svg {
+  display: block;
+}
+
 .backend-pill {
   padding: 8px 12px;
   color: #a9c8ca;
@@ -169,10 +173,10 @@ input:focus-visible {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #f5c977;
+  background: #5b9bff;
   box-shadow:
-    0 0 0 4px rgb(245 201 119 / 0.14),
-    0 0 16px #f5c977;
+    0 0 0 4px rgb(91 155 255 / 0.16),
+    0 0 16px #5b9bff;
 }
 
 .compass-ribbon {
@@ -261,15 +265,26 @@ input:focus-visible {
   will-change: transform;
 }
 
-.sky-marker-ring {
+/* A small filled dot on the body itself; bodies whose disc is visibly
+   rendered drop it (sky-marker--resolved) and keep only the label. */
+.sky-marker-dot {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 18px;
-  height: 18px;
-  border: 1px solid rgb(245 201 119 / 0.75);
+  top: 7px;
+  left: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
-  box-shadow: 0 0 10px rgb(245 201 119 / 0.25);
+  background: rgb(245 201 119 / 0.9);
+  box-shadow: 0 0 8px rgb(245 201 119 / 0.35);
+}
+
+.sky-marker--resolved .sky-marker-dot {
+  display: none;
+}
+
+.sky-marker[data-body="earth"] .sky-marker-dot {
+  background: rgb(126 174 255 / 0.95);
+  box-shadow: 0 0 8px rgb(126 174 255 / 0.4);
 }
 
 .sky-marker-label {
@@ -280,7 +295,7 @@ input:focus-visible {
   white-space: nowrap;
 }
 
-.sky-marker:focus-visible .sky-marker-ring {
+.sky-marker:focus-visible .sky-marker-dot {
   outline: 2px solid rgb(245 217 165 / 0.9);
   outline-offset: 2px;
 }
@@ -300,19 +315,19 @@ input:focus-visible {
   will-change: transform;
 }
 
-.sky-marker:hover .sky-marker-ring,
-.sky-marker:focus-visible .sky-marker-ring {
-  border-color: #f5c977;
-  box-shadow: 0 0 14px rgb(245 201 119 / 0.55);
+.sky-marker:hover .sky-marker-dot,
+.sky-marker:focus-visible .sky-marker-dot {
+  background: #f5c977;
+  box-shadow: 0 0 12px rgb(245 201 119 / 0.55);
 }
 
 .sky-marker--ghost {
   color: rgb(226 240 240 / 0.38);
 }
 
-.sky-marker--ghost .sky-marker-ring {
-  border-style: dashed;
-  border-color: rgb(148 175 180 / 0.45);
+.sky-marker--ghost .sky-marker-dot {
+  background: none;
+  border: 1px solid rgb(148 175 180 / 0.5);
   box-shadow: none;
 }
 
@@ -740,16 +755,21 @@ input:focus-visible {
   }
 }
 
+/* Edge-pinned markers keep a small label so you know what lies off-screen
+   in that direction. */
 .sky-marker--edge .sky-marker-label {
-  display: none;
+  font-size: 0.55rem;
+  opacity: 0.8;
 }
 
-.sky-marker--edge .sky-marker-ring {
-  top: 4px;
-  left: 4px;
-  width: 10px;
-  height: 10px;
-  opacity: 0.6;
+.sky-marker--edge .sky-marker-dot {
+  opacity: 0.7;
+}
+
+/* Near the bottom of the frame the label flips above the dot. */
+.sky-marker--label-above .sky-marker-label {
+  top: auto;
+  bottom: 23px;
 }
 
 .observer-label--button {

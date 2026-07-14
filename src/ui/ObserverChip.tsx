@@ -25,13 +25,7 @@ const SOURCE_HINTS: Record<ObserverLocation["source"], string> = {
   fallback: "Default location",
 };
 
-export function ObserverChip({
-  observer,
-  facingLabel,
-}: {
-  observer: ObserverLocation;
-  facingLabel: string | null;
-}) {
+export function ObserverChip({ observer }: { observer: ObserverLocation }) {
   const [open, setOpen] = useState(false);
   const [latitudeInput, setLatitudeInput] = useState(observer.latitudeDeg.toFixed(4));
   const [longitudeInput, setLongitudeInput] = useState(observer.longitudeDeg.toFixed(4));
@@ -45,15 +39,6 @@ export function ObserverChip({
       setGeoStatus("Device orientation is not available on this device or was declined.");
     }
   };
-
-  const facingText =
-    facingLabel === null
-      ? ""
-      : facingLabel === "South"
-        ? "Facing south · "
-        : facingLabel === "Moon" || facingLabel === "Sun"
-          ? `Facing the ${facingLabel} · `
-          : `Facing ${facingLabel} · `;
 
   // A coarse, familiar anchor ("Near Indianapolis, IN") instead of raw
   // coordinates — friendlier and narrower on small screens. The exact
@@ -118,7 +103,6 @@ export function ObserverChip({
         aria-expanded={open}
       >
         <span className="pulse-dot" />
-        {facingText}
         {placeText}
       </button>
 

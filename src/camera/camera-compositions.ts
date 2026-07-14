@@ -100,10 +100,12 @@ export function eclipticRollBlendForAltitude(altitudeM: number): number {
  * Sun and inner system in the background, day or night alike.
  */
 export function cameraArcBlendForAltitude(altitudeM: number): number {
-  // Starting at low orbit (not the atmosphere) keeps the early ascent a
-  // simple straight rise — the swing happens while Earth is already a ball.
+  // The arc shares the roll's whole band (atmosphere → whole Earth) so the
+  // pull-out is ONE continuous motion — nothing new starts at low orbit, and
+  // the gaze leaves the nadir as soon as the roll begins, which keeps the
+  // roll's screen-up projection well-conditioned.
   const logAltitude = Math.log10(Math.max(1, altitudeM));
-  const t = Math.min(1, Math.max(0, (logAltitude - 5.7) / (7.3 - 5.7)));
+  const t = Math.min(1, Math.max(0, (logAltitude - 5) / (7.3 - 5)));
   return t * t * (3 - 2 * t);
 }
 

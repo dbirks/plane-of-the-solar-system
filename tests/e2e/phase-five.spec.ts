@@ -16,12 +16,14 @@ test("Earth imagery loads asynchronously without blocking the opening", async ({
   await page.goto(fixedScenario);
   // Opening is immediate (no permission prompt, no loading gate)…
   await expect(page.getByRole("heading", { name: "Ground" })).toBeVisible();
-  // …and the two NASA textures arrive afterwards (3 base + day + night = 5).
+  // …and the NASA textures arrive afterwards (3 base + day + night + moon).
+  // The horizon-glow canvas textures only upload inside their sunset/sunrise
+  // windows, and this scenario sits ~85 minutes after sunset.
   await expect
     .poll(async () => (await debugValue(page, "GPU resources").textContent()) ?? "", {
       timeout: 20_000,
     })
-    .toContain("8 tex");
+    .toContain("6 tex");
 });
 
 test("layers panel toggles explanation geometry and documents credits", async ({ page }) => {

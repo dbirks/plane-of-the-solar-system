@@ -11,27 +11,27 @@ All six phases of `SPEC.md` (0–5) are implemented: the precision ground-to-who
 - **The real sky for your place and moment**: the Sun, Moon, bright planets, and 2,865 catalog stars occupy their true directions, computed by astronomy-engine and cross-validated against an independent Meeus reference
 - The Moon shows its actual phase — the terminator is physical geometry lit by the true Sun direction, never a texture
 - A deterministic opening view: the camera greets you facing the Moon, the setting Sun, a bright planet, or a bright star
-- Screen-space markers with click-to-look for every bright body, ghosted below the horizon, edge-pinned when off-view
-- A live sliding compass, day/twilight/night sky driven by true Sun altitude, stars that emerge through dusk, and **sunset/sunrise glows on the horizon** marking where the Sun went down and where it returns
+- Screen-space **dot markers** with click-to-look for every bright body — a small dot and label when a body is too far to resolve, label alone once its disc is plainly visible (no circles around the whole Earth or the near Moon), hollow when ghosted below the horizon, and edge-pinned with a small name label when off-view
+- A live sliding compass (which bows out once cardinal directions stop meaning anything), day/twilight/night sky driven by true Sun altitude, stars that emerge through dusk, and **sunset/sunrise glows on the horizon** that appear only around their own events — the sunset glow from shortly before sunset to about an hour after, the sunrise glow mirrored
 - A **first-visit welcome dialog** (how to look, zoom, and point your phone at the sky); the header title tracks your landmark live, and altitude readouts include your real ground elevation
 - The pull-out looks down at **your own blue dot** from the first kilometres up, then the camera **arcs around the planet** to an anti-sunward vantage: Earth stands alone with your dot on its side and the Sun, Mercury, and Venus in the background, day or night, while the gaze never leaves Earth
 - From whole Earth out, **dragging orbits you around the planet** (Earth stays centered, like turning a globe) instead of panning the view; an Earth marker with top label priority joins the system-scale sky
 - Keep pulling out to the **Earth–Moon landmark at 500,000 km (310,686 mi)**: the physical Moon at true, uncompressed distance, its real orbit traced around Earth, and a sunlight-direction guide — with a jump-free hand-off from the sky view
-- Click the Moon for an inspection inset: phase disc, phase name, illuminated fraction, and distance, always matching the scene geometry
+- Click the Moon for an inspection inset: the **NASA LRO lunar nearside rendered as the phase disc** (crisp at your device's pixel ratio, dark side in faint earthshine), phase name, illuminated fraction, and distance, always matching the scene geometry
 - Continue out to the **inner system (2.7 AU)** and the **full solar system (80 AU)**: every planet to Pluto at its true current position and radius — Pluto's whole orbit inside the final frame — riding precomputed orbit lines, with faint ecliptic rings making the plane of the solar system visible
-- On the way out, the view **rolls from your local "up" onto the plane of the solar system** — starting as the atmosphere gives way to space and complete by whole Earth, which arrives visibly tilted against an already-flat ecliptic, revealing that you were standing on the side of a planet
-- The **plane of the solar system is drawn at every scale**: a labeled ecliptic band across the real sky from the ground (the strip the Sun, Moon, and planets ride, captioned "Plane of the solar system"), Earth's own orbit line around the Sun, and the faint ecliptic rings at system scale
+- On the way out, the arc and the roll run as **one continuous motion**: from the atmosphere to whole Earth the view swings around the planet while screen-up rolls from your local "up" onto the plane of the solar system, so whole Earth arrives visibly tilted against an already-flat ecliptic — you were standing on the side of a planet — with no new movement starting at low orbit and the roll never reversing direction
+- The **plane of the solar system is drawn at every scale**: a labeled ecliptic band across the real sky from the ground (the strip the Sun, Moon, and planets ride, captioned "Plane of the solar system"), a **dotted continuation below the horizon** so the band visibly loops the whole sky, Earth's own orbit line around the Sun, and the faint ecliptic rings at system scale — its height over your head is pinned to astronomy-engine in tests (low on July evenings, high on January ones: that's the sky, not a bug)
 - Select any body's marker for distances and magnitude; nothing is ever enlarged — markers carry the discoverability
 - **NASA Blue Marble** Earth with **Black Marble city lights** on the physically-lit night side, and the **NASA LRO lunar surface** on the physically-lit Moon (async-loaded, attributed); up close the globe holds a clean stylized tone until the imagery is at native resolution
 - A Layers panel for optional explanation geometry: orbits, ecliptic rings, Moon orbit, sunlight direction, Earth axis & equator, sky grid, labels — sparse by default
 - Marker labels declutter automatically when bodies crowd; adaptive pixel-ratio under sustained slow frames
 - **Compass mode**: opt-in device orientation drives both heading and pitch, so aiming your phone at the sky looks there
 - Distances read in **miles or kilometres by your device's region** (US/GB/LR/MM get miles; `?units=mi|km` overrides); astronomical distances stay in AU
-- Offline location chain (URL → saved → timezone guess → fallback) with a picker for manual coordinates and opt-in device location — never a permission prompt on opening; the chip shows a coarse "Near <city>" anchor (bundled GeoNames subset, matched on-device) instead of raw coordinates
+- Offline location chain (URL → saved → timezone guess → fallback) with a picker for manual coordinates and opt-in device location — never a permission prompt on opening; the blue chip shows a coarse "Near <city>" anchor (bundled GeoNames subset, matched on-device) instead of raw coordinates, and your maps-blue dot (bright core, darker rim) retires by the Earth–Moon landmark
 - Direct Three.js `WebGPURenderer` with automatic WebGL 2 fallback and forced-WebGL mode
 - Camera-relative rendering with canonical double-precision meter values; smooth, damped piecewise-logarithmic travel through ground, atmosphere, low orbit, and whole Earth
 - Fixed time/location/debug controls, live precision/performance telemetry, and reduced-motion support
-- 91 unit tests, 44 Playwright scenarios (desktop + mobile), and GitHub Pages deployment
+- 94 unit tests, 44 Playwright scenarios (desktop + mobile), and GitHub Pages deployment
 
 ## Run locally
 

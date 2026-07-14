@@ -91,7 +91,7 @@ type BodyDefinition = {
 };
 
 const SUN_RADIUS_M = 695_700_000;
-const MOON_RADIUS_M = 1_738_100;
+export const MOON_RADIUS_M = 1_738_100;
 
 const BODY_DEFINITIONS: readonly BodyDefinition[] = [
   { id: "sun", label: "Sun", body: Body.Sun, radiusM: SUN_RADIUS_M },
@@ -109,8 +109,12 @@ const BODY_DEFINITIONS: readonly BodyDefinition[] = [
 export type SunHorizonEvents = {
   /** Azimuth where the Sun last set / will set (degrees, north→east). */
   setAzimuthDeg: number;
+  /** When that sunset happens (UTC milliseconds). */
+  setUtcMs: number;
   /** Azimuth where the Sun will rise / last rose. */
   riseAzimuthDeg: number;
+  /** When that sunrise happens (UTC milliseconds). */
+  riseUtcMs: number;
 };
 
 /**
@@ -136,7 +140,12 @@ export function computeSunHorizonEvents(
     const equatorial = Equator(Body.Sun, time, observer, true, true);
     return Horizon(time, observer, equatorial.ra, equatorial.dec, "normal").azimuth;
   };
-  return { setAzimuthDeg: azimuthAt(setEvent), riseAzimuthDeg: azimuthAt(riseEvent) };
+  return {
+    setAzimuthDeg: azimuthAt(setEvent),
+    setUtcMs: setEvent.date.getTime(),
+    riseAzimuthDeg: azimuthAt(riseEvent),
+    riseUtcMs: riseEvent.date.getTime(),
+  };
 }
 
 /** Convert an alt-az direction (degrees, azimuth from north toward east) to a local-Three unit vector. */

@@ -6,16 +6,51 @@ import { useAppStore } from "../app/app-store";
 
 const DISC_SIZE_PX = 104;
 
+// The nearside face for the disc, from the same NASA LRO map the scene uses.
+const moonFace = new Image();
+moonFace.src = `${import.meta.env.BASE_URL}textures/moon-lroc-2048.jpg`;
+
 /**
- * Draw the lit portion of the disc from the phase angle (0 new → 180 full).
- * Classic two-arc construction: half the disc is lit, and the terminator is a
- * half-ellipse whose minor axis follows cos(phase). Waxing light grows on the
- * right, as seen from the northern hemisphere.
+ * Trace the lit region as one path: half the limb on the bright side plus the
+ * terminator half-ellipse whose minor axis follows cos(phase). Waxing light
+ * grows on the right, as seen from the northern hemisphere.
+ */
+function traceLitRegion(
+  context: CanvasRenderingContext2D,
+  center: number,
+  radius: number,
+  illuminatedFraction: number,
+  waxing: boolean,
+): void {
+  const minorAxis = Math.max(0.4, radius * Math.abs(2 * illuminatedFraction - 1));
+  // A crescent's terminator bulges toward the lit limb, a gibbous one away.
+  const counterclockwise = illuminatedFraction < 0.5;
+  context.beginPath();
+  if (waxing) {
+    context.arc(center, center, radius, -Math.PI / 2, Math.PI / 2, false);
+    context.ellipse(center, center, minorAxis, radius, 0, Math.PI / 2, -Math.PI / 2, counterclockwise);
+  } else {
+    context.arc(center, center, radius, Math.PI / 2, -Math.PI / 2, false);
+    context.ellipse(center, center, minorAxis, radius, 0, -Math.PI / 2, Math.PI / 2, counterclockwise);
+  }
+  context.closePath();
+}
+
+/**
+ * Draw the phase disc: the LRO nearside as the face (crisp at device pixel
+ * ratio), fully drawn in faint earthshine, with the lit region re-drawn at
+ * full brightness through the terminator path.
  */
 function drawPhaseDisc(canvas: HTMLCanvasElement, phaseDeg: number): void {
   const context = canvas.getContext("2d");
   if (!context) return;
-  const size = canvas.width;
+  const pixelRatio = Math.min(3, window.devicePixelRatio || 1);
+  const size = DISC_SIZE_PX;
+  if (canvas.width !== size * pixelRatio) {
+    canvas.width = size * pixelRatio;
+    canvas.height = size * pixelRatio;
+  }
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   const center = size / 2;
   const radius = size / 2 - 2;
   const normalized = ((phaseDeg % 360) + 360) % 360;
@@ -24,28 +59,44 @@ function drawPhaseDisc(canvas: HTMLCanvasElement, phaseDeg: number): void {
 
   context.clearRect(0, 0, size, size);
 
-  // Night side.
-  context.fillStyle = "#232b34";
+  const drawFace = () => {
+    if (moonFace.complete && moonFace.naturalWidth > 0) {
+      // Central square of the equirectangular map ≈ the nearside face.
+      const sourceSize = moonFace.naturalHeight;
+      const sourceX = (moonFace.naturalWidth - sourceSize) / 2;
+      context.drawImage(
+        moonFace,
+        sourceX,
+        0,
+        sourceSize,
+        sourceSize,
+        center - radius,
+        center - radius,
+        radius * 2,
+        radius * 2,
+      );
+    } else {
+      context.fillStyle = "#c9c4b8";
+      context.fillRect(center - radius, center - radius, radius * 2, radius * 2);
+    }
+  };
+
+  // Night side first: the whole face in faint earthshine.
+  context.save();
   context.beginPath();
   context.arc(center, center, radius, 0, Math.PI * 2);
-  context.fill();
+  context.clip();
+  context.filter = "brightness(0.22) saturate(0.6)";
+  drawFace();
+  context.restore();
 
-  // Lit semicircle on the bright-limb side.
-  context.fillStyle = "#e9e6dc";
-  context.beginPath();
-  if (waxing) {
-    context.arc(center, center, radius, -Math.PI / 2, Math.PI / 2);
-  } else {
-    context.arc(center, center, radius, Math.PI / 2, (3 * Math.PI) / 2);
-  }
-  context.fill();
-
-  // Terminator ellipse: adds light past half phase, removes it before.
-  const minorAxis = radius * Math.abs(2 * illuminatedFraction - 1);
-  context.fillStyle = illuminatedFraction >= 0.5 ? "#e9e6dc" : "#232b34";
-  context.beginPath();
-  context.ellipse(center, center, Math.max(0.5, minorAxis), radius, 0, 0, Math.PI * 2);
-  context.fill();
+  // Lit region at full brightness through the terminator path.
+  context.save();
+  traceLitRegion(context, center, radius, illuminatedFraction, waxing);
+  context.clip();
+  context.filter = "brightness(1.12)";
+  drawFace();
+  context.restore();
 }
 
 export function MoonInset() {
@@ -58,7 +109,14 @@ export function MoonInset() {
 
   useEffect(() => {
     if (!open || !canvasRef.current || !skyReadout) return;
-    drawPhaseDisc(canvasRef.current, skyReadout.moonPhaseDeg);
+    const canvas = canvasRef.current;
+    drawPhaseDisc(canvas, skyReadout.moonPhaseDeg);
+    if (!moonFace.complete) {
+      const redraw = () => drawPhaseDisc(canvas, skyReadout.moonPhaseDeg);
+      moonFace.addEventListener("load", redraw, { once: true });
+      return () => moonFace.removeEventListener("load", redraw);
+    }
+    return undefined;
   }, [open, skyReadout]);
 
   if (!open || !skyReadout) return null;
@@ -81,6 +139,7 @@ export function MoonInset() {
           ref={canvasRef}
           width={DISC_SIZE_PX}
           height={DISC_SIZE_PX}
+          style={{ width: DISC_SIZE_PX, height: DISC_SIZE_PX }}
           role="img"
           aria-label={`Moon phase: ${moonPhaseName(skyReadout.moonPhaseDeg)}`}
         />

@@ -1,6 +1,7 @@
 import { Body, Equator, MakeTime, Observer } from "astronomy-engine";
 import { describe, expect, it } from "vitest";
 
+import { computeEclipticRingEqjM, eclipticNorthEqj } from "../astronomy/planet-orbits";
 import { altAzToLocalThree, computeSkyState, computeSunHorizonEvents } from "../astronomy/sky-state";
 import type { Vec3d } from "../coordinates/vec3d";
 import {
@@ -197,5 +198,67 @@ describe("computeSunHorizonEvents (azimuth degrees, north→east)", () => {
 
   it("returns null in polar day", () => {
     expect(computeSunHorizonEvents(Date.parse("2026-06-21T12:00:00Z"), 80, 0)).toBeNull();
+  });
+
+  it("reports event times bracketing a night-time query", () => {
+    const utcMs = Date.parse("2026-07-24T02:30:00Z"); // 10:30pm EDT
+    const events = computeSunHorizonEvents(utcMs, 39.7684, -86.1581);
+    expect(events).not.toBeNull();
+    // The most recent sunset was one-to-three hours ago; sunrise is hours off.
+    expect(utcMs - events!.setUtcMs).toBeGreaterThan(3_600_000);
+    expect(utcMs - events!.setUtcMs).toBeLessThan(3 * 3_600_000);
+    expect(events!.riseUtcMs - utcMs).toBeGreaterThan(4 * 3_600_000);
+    expect(events!.riseUtcMs - utcMs).toBeLessThan(12 * 3_600_000);
+  });
+});
+
+describe("sky-shell ecliptic band placement (EQJ ring through eqjToLocalThree, degrees)", () => {
+  function bandMaxAltitudeDeg(utcMs: number, latitudeDeg: number, longitudeDeg: number): number {
+    const sky = computeSkyState(utcMs, latitudeDeg, longitudeDeg);
+    const m = sky.eqjToLocalThree;
+    const ring = computeEclipticRingEqjM(1, 720);
+    let maxSinAltitude = -1;
+    for (let i = 0; i < ring.length; i += 3) {
+      const length = Math.hypot(ring[i]!, ring[i + 1]!, ring[i + 2]!);
+      const x = ring[i]! / length;
+      const y = ring[i + 1]! / length;
+      const z = ring[i + 2]! / length;
+      // Local-Three y is up.
+      const up = m[3]! * x + m[4]! * y + m[5]! * z;
+      if (up > maxSinAltitude) maxSinAltitude = up;
+    }
+    return (Math.asin(Math.min(1, maxSinAltitude)) * 180) / Math.PI;
+  }
+
+  it("rides low over Indianapolis on a July evening and high on a January one", () => {
+    // 10pm EDT, 2026-07-13: the visible (anti-solar) half of the ecliptic sits
+    // near -23° declination in July, so the band tops out around 30° — low is
+    // correct on summer evenings; winter evenings are the high ones.
+    const july = bandMaxAltitudeDeg(Date.parse("2026-07-14T02:00:00Z"), 39.7684, -86.1581);
+    expect(july).toBeGreaterThan(28);
+    expect(july).toBeLessThan(37);
+    const january = bandMaxAltitudeDeg(Date.parse("2026-01-14T02:00:00Z"), 39.7684, -86.1581);
+    expect(january).toBeGreaterThan(65);
+    expect(january).toBeLessThan(78);
+  });
+
+  it("keeps the Sun on the band at every fixed epoch", () => {
+    for (const testCase of FIXED_CASES) {
+      const sky = computeSkyState(testCase.utcMs, testCase.latitudeDeg, testCase.longitudeDeg);
+      const m = sky.eqjToLocalThree;
+      const [nx, ny, nz] = eclipticNorthEqj();
+      const northLocal: Vec3d = [
+        m[0]! * nx + m[1]! * ny + m[2]! * nz,
+        m[3]! * nx + m[4]! * ny + m[5]! * nz,
+        m[6]! * nx + m[7]! * ny + m[8]! * nz,
+      ];
+      const [sx, sy, sz] = sky.sun.directionLocalThree;
+      const eclipticLatitudeDeg =
+        (Math.asin(Math.abs(sx * northLocal[0] + sy * northLocal[1] + sz * northLocal[2])) * 180) /
+        Math.PI;
+      // Topocentric parallax and refraction keep it within a fraction of the
+      // band's ±1.5° half-width.
+      expect(eclipticLatitudeDeg).toBeLessThan(0.5);
+    }
   });
 });

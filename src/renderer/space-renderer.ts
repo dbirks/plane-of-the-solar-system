@@ -15,6 +15,7 @@ import {
   altAzToLocalThree,
   computeSkyState,
   computeSunHorizonEvents,
+  MOON_RADIUS_M,
   type SkyState,
 } from "../astronomy/sky-state";
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
@@ -200,11 +201,17 @@ function createSceneObjects(
   const localCap = new THREE.Mesh(new THREE.CircleGeometry(1, 128), capMaterial);
   localCap.rotation.x = -Math.PI / 2;
 
-  // Maps-style blue: "you are here".
+  // Maps-style blue: a bright "you are here" dot inside a darker blue rim
+  // (back-face shell, so the rim reads as an outline around the dot).
   const observerMarker = new THREE.Mesh(
     new THREE.SphereGeometry(1, 32, 16),
-    new THREE.MeshBasicMaterial({ color: 0x4c8df5 }),
+    new THREE.MeshBasicMaterial({ color: 0x74b3ff }),
   );
+  const observerMarkerRim = new THREE.Mesh(
+    new THREE.SphereGeometry(1.5, 32, 16),
+    new THREE.MeshBasicMaterial({ color: 0x1d4e9e, side: THREE.BackSide, depthWrite: false }),
+  );
+  observerMarker.add(observerMarkerRim);
 
   const coordinateGrid = createCoordinateGrid();
   const continentOutlines = createContinentOutlines(observerLatitudeDeg, observerLongitudeDeg);
@@ -250,6 +257,7 @@ export class SpaceRenderer {
   private skyState: SkyState | null = null;
   /** Geocentric body positions in local-frame meters, cached per astronomy tick. */
   private readonly bodyGeoLocalM = new Map<string, Vec3d>();
+  private readonly bodyRadiusM = new Map<string, number>();
   private overlay: SkyOverlay | null = null;
   private readonly overlayRoot: HTMLElement | null;
   private lookTarget: { azimuthDeg: number; altitudeDeg: number } | null = null;
@@ -265,6 +273,7 @@ export class SpaceRenderer {
   /** Unit direction from Earth's center to the camera, local frame. */
   private readonly cameraDirLocal = new THREE.Vector3(0, 1, 0);
   private readonly arcQuaternion = new THREE.Quaternion();
+  private lastRollAngle: number | null = null;
   private moonGeoLocalM: Vec3d | null = null;
   private readoutElement: HTMLElement | null = null;
   private readoutLabelElement: HTMLElement | null = null;
@@ -381,13 +390,16 @@ export class SpaceRenderer {
    * camera sits at earth-center + (R + altitude) along `cameraDirLocal`
    * (the observer zenith near the ground, the reveal arc beyond).
    */
-  private rayFromGeoLocal(geoLocalM: Vec3d, altitudeM: number): Vec3d {
+  private rayFromGeoLocal(
+    geoLocalM: Vec3d,
+    altitudeM: number,
+  ): { ray: Vec3d; distanceM: number } {
     const cameraRadiusM = altitudeM + EARTH_MEAN_RADIUS_M;
     const x = geoLocalM[0] - this.cameraDirLocal.x * cameraRadiusM;
     const y = geoLocalM[1] - this.cameraDirLocal.y * cameraRadiusM;
     const z = geoLocalM[2] - this.cameraDirLocal.z * cameraRadiusM;
     const lengthM = Math.hypot(x, y, z) || 1;
-    return [x / lengthM, y / lengthM, z / lengthM];
+    return { ray: [x / lengthM, y / lengthM, z / lengthM], distanceM: lengthM };
   }
 
   /** Aim the opening view at the spec-scored target (Moon, Sun, planet, star, or south). */
@@ -491,7 +503,9 @@ export class SpaceRenderer {
         planet.id,
         rotateEqjToLocal(sky.eqjToLocalThree, subtractVec3d(planet.helioEqjM, sky.earthHelioEqjM)),
       );
+      this.bodyRadiusM.set(planet.id, planet.radiusM);
     }
+    this.bodyRadiusM.set("sun", sky.sun.radiusM);
     // Topocentric → earth-centered: the observer sits R above the center.
     this.bodyGeoLocalM.set("sun", [
       sky.sun.directionLocalThree[0] * sky.sun.distanceM,
@@ -681,16 +695,21 @@ export class SpaceRenderer {
     (this.objects.localCap.material as THREE.MeshStandardMaterial).opacity = localFade;
 
     // The observer's dot appears as soon as the gaze starts sweeping down —
-    // "that is where I am standing" anchors the rest of the pull-out.
-    const markerReveal = smoothstep(1_500, 30_000, altitudeM);
+    // "that is where I am standing" anchors the rest of the pull-out — and
+    // retires on the way to the Earth–Moon landmark, where "where exactly on
+    // the ball" stops mattering.
+    const markerReveal =
+      smoothstep(1_500, 30_000, altitudeM) * (1 - smoothstep(1.2e8, 4e8, altitudeM));
     const markerDistanceRender = observerSurfaceRender.length();
     const markerSize = Math.max(0.002, markerDistanceRender * 0.006);
     this.objects.observerMarker.position.copy(observerSurfaceRender);
     this.objects.observerMarker.scale.setScalar(markerSize);
     this.objects.observerMarker.visible = markerReveal > 0.001;
-    const markerMaterial = this.objects.observerMarker.material as THREE.MeshBasicMaterial;
-    markerMaterial.transparent = true;
-    markerMaterial.opacity = markerReveal;
+    for (const mesh of [this.objects.observerMarker, ...this.objects.observerMarker.children]) {
+      const markerMaterial = (mesh as THREE.Mesh).material as THREE.MeshBasicMaterial;
+      markerMaterial.transparent = true;
+      markerMaterial.opacity = markerReveal;
+    }
 
     // Twilight state drives sky, atmosphere, and star visibility.
     const daylight = smoothstep(-6, 8, this.sunAltitudeDeg);
@@ -708,6 +727,7 @@ export class SpaceRenderer {
     this.skyLayer?.updateAltitude(
       altitudeM,
       this.sunAltitudeDeg,
+      simulationUtcMs,
       systemReveal,
       layers["ecliptic-rings"],
     );
@@ -845,14 +865,24 @@ export class SpaceRenderer {
         .addScaledVector(gaze, -this.eclipticNorthLocal.dot(gaze));
       if (desiredUp.lengthSq() > 1e-8) {
         desiredUp.normalize();
-        const rollAngle = Math.atan2(
+        let rollAngle = Math.atan2(
           new THREE.Vector3().crossVectors(currentUp, desiredUp).dot(gaze),
           currentUp.dot(desiredUp),
         );
+        // Unwrap against the previous frame: near ±180° the shortest-path
+        // sign is ambiguous, and a raw atan2 can flip it frame to frame —
+        // the roll must keep turning the same way for the whole journey.
+        if (this.lastRollAngle !== null) {
+          rollAngle +=
+            2 * Math.PI * Math.round((this.lastRollAngle - rollAngle) / (2 * Math.PI));
+        }
+        this.lastRollAngle = rollAngle;
         baseQuaternion.premultiply(
           new THREE.Quaternion().setFromAxisAngle(gaze, rollAngle * rollBlend),
         );
       }
+    } else {
+      this.lastRollAngle = null;
     }
 
     // Marker-click look-at: ease the free-look offsets toward the body. The
@@ -925,21 +955,25 @@ export class SpaceRenderer {
 
     const headingDeg = ((-THREE.MathUtils.radToDeg(baseYawRad + this.yawOffset) % 360) + 360) % 360;
     const overrides = new Map<string, MoonMarkerOverride>();
+    const apparentRadiusDeg = (radiusM: number, distanceM: number) =>
+      (Math.asin(Math.min(1, radiusM / Math.max(radiusM, distanceM))) * 180) / Math.PI;
     if (this.moonPlacement) {
       overrides.set("moon", {
         directionLocalThree: this.moonPlacement.rayLocal,
         ...rayToAltAzDeg(this.moonPlacement.rayLocal),
         physical: this.moonPlacement.physical,
+        apparentRadiusDeg: apparentRadiusDeg(MOON_RADIUS_M, this.moonPlacement.cameraDistanceM),
       });
     }
     if (systemReveal > 0) {
       for (const [bodyId, geoLocalM] of this.bodyGeoLocalM) {
         if (bodyId === "moon") continue;
-        const ray = this.rayFromGeoLocal(geoLocalM, altitudeM);
+        const { ray, distanceM } = this.rayFromGeoLocal(geoLocalM, altitudeM);
         overrides.set(bodyId, {
           directionLocalThree: ray,
           ...rayToAltAzDeg(ray),
           physical: true,
+          apparentRadiusDeg: apparentRadiusDeg(this.bodyRadiusM.get(bodyId) ?? 0, distanceM),
         });
       }
       // Earth itself, straight along the gaze at Earth's render center.
@@ -953,6 +987,7 @@ export class SpaceRenderer {
         directionLocalThree: earthRay,
         ...rayToAltAzDeg(earthRay),
         physical: true,
+        apparentRadiusDeg: apparentRadiusDeg(EARTH_MEAN_RADIUS_M, altitudeM + EARTH_MEAN_RADIUS_M),
       });
     }
     this.overlay?.update(
