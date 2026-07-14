@@ -18,7 +18,7 @@ export async function togglePhoneLook(): Promise<boolean> {
     return true;
   }
   const stop = await startCompass((look) =>
-    useAppStore.getState().setCompassLook(look.headingDeg, look.pitchDeg),
+    useAppStore.getState().setCompassLook(look.headingDeg, look.pitchDeg, look.quaternion),
   );
   if (!stop) return false;
   stopCompass = stop;

@@ -26,23 +26,26 @@ test("Earth imagery loads asynchronously without blocking the opening", async ({
     .toContain("6 tex");
 });
 
-test("layers panel toggles explanation geometry and documents credits", async ({ page }) => {
+test("settings dialog houses the guide toggles and documents credits", async ({ page }) => {
   await page.goto(fixedScenario);
-  await page.getByRole("button", { name: "Layers" }).click();
-  const panel = page.getByRole("complementary", { name: "Explanation layers" });
-  await expect(panel).toBeVisible();
+  await page.getByRole("button", { name: "Settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog).toBeVisible();
 
   // Defaults stay sparse: axis and sky grid are off, guides are on.
-  await expect(panel.getByLabel("Earth axis & equator")).not.toBeChecked();
-  await expect(panel.getByLabel("Sky grid")).not.toBeChecked();
-  await expect(panel.getByLabel("Planet orbits")).toBeChecked();
+  await expect(dialog.getByLabel("Earth axis & equator")).not.toBeChecked();
+  await expect(dialog.getByLabel("Sky grid")).not.toBeChecked();
+  await expect(dialog.getByLabel("Planet orbits")).toBeChecked();
 
-  await panel.getByLabel("Sky grid").check();
-  await expect(panel.getByLabel("Sky grid")).toBeChecked();
-  await panel.getByLabel("Marker labels").uncheck();
+  await dialog.getByLabel("Sky grid").check();
+  await expect(dialog.getByLabel("Sky grid")).toBeChecked();
+  await dialog.getByLabel("Marker labels").uncheck();
+  await expect(dialog.getByText(/NASA Blue Marble/)).toBeVisible();
+
+  // The X closes it, and the toggle took effect in the scene.
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await expect(dialog).not.toBeVisible();
   await expect(page.locator(".sky-marker[data-body=moon]")).toHaveClass(/sky-marker--nolabel/);
-
-  await expect(panel.getByText(/NASA Blue Marble/)).toBeVisible();
 });
 
 test("marker labels declutter when bodies crowd together", async ({ page }) => {
@@ -56,10 +59,14 @@ test("marker labels declutter when bodies crowd together", async ({ page }) => {
     .toBeGreaterThan(0);
 });
 
-test("reduced motion preference is exposed and honored in settings", async ({ page }) => {
+test("settings dialog explains movement and offers compass mode where supported", async ({
+  page,
+}) => {
   await page.goto(fixedScenario);
-  await page.getByRole("button", { name: "About & how to move" }).click();
-  const checkbox = page.getByRole("checkbox", { name: "Gentler camera (less motion)" });
-  await checkbox.check();
-  await expect(checkbox).toBeChecked();
+  await page.getByRole("button", { name: "Settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog.getByText("How to move")).toBeVisible();
+  await expect(dialog.getByText(/Drag/)).toBeVisible();
+  // Headless Chromium reports DeviceOrientationEvent, so the section shows.
+  await expect(dialog.getByRole("button", { name: /Compass mode/ })).toBeVisible();
 });

@@ -1,9 +1,6 @@
 import { useMemo, useState } from "react";
 
-import { useAppStore } from "../app/app-store";
-import { compassSupported } from "../location/compass-mode";
 import { nearestPlace } from "../location/nearest-place";
-import { togglePhoneLook } from "../location/phone-look";
 import {
   clearSavedObserver,
   type ObserverLocation,
@@ -31,14 +28,6 @@ export function ObserverChip({ observer }: { observer: ObserverLocation }) {
   const [longitudeInput, setLongitudeInput] = useState(observer.longitudeDeg.toFixed(4));
   const [geoStatus, setGeoStatus] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
-  const compassActive = useAppStore((state) => state.phoneLookActive);
-
-  const toggleCompass = async () => {
-    const changed = await togglePhoneLook();
-    if (!changed) {
-      setGeoStatus("Device orientation is not available on this device or was declined.");
-    }
-  };
 
   // A coarse, familiar anchor ("Near Indianapolis, IN") instead of raw
   // coordinates — friendlier and narrower on small screens. The exact
@@ -114,11 +103,6 @@ export function ObserverChip({ observer }: { observer: ObserverLocation }) {
             <button type="button" className="quiet-button" onClick={useDeviceLocation}>
               Use my location
             </button>
-            {compassSupported() && (
-              <button type="button" className="quiet-button" onClick={() => void toggleCompass()}>
-                {compassActive ? "Compass mode on" : "Compass mode"}
-              </button>
-            )}
           </div>
 
           <span className="eyebrow location-section">Or enter coordinates</span>

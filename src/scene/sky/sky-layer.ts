@@ -22,6 +22,7 @@ import * as THREE from "three/webgpu";
 
 import type { MoonPlacement } from "../../astronomy/moon-placement";
 import { computeEclipticRingEqjM, eclipticNorthEqj } from "../../astronomy/planet-orbits";
+import type { Vec3d } from "../../coordinates/vec3d";
 import {
   altAzToLocalThree,
   type SkyBodyState,
@@ -598,6 +599,60 @@ export class SkyLayer {
     positionAttribute.needsUpdate = true;
     colorAttribute.needsUpdate = true;
     sizeAttribute.needsUpdate = true;
+  }
+
+  /**
+   * Per-frame proxy parallax: the Sun disc, its glow, and the planet points
+   * follow the camera's TRUE position (rays computed against the moving
+   * camera, not the ground observer), so when the physical heliocentric
+   * bodies fade in they land exactly on top of their proxies — never a
+   * second sun mid-transition.
+   */
+  updateProxyDirections(
+    rays: ReadonlyMap<string, Vec3d>,
+    sky: SkyState,
+    geometricBlend: number,
+  ): void {
+    const blended = (refracted: Vec3d, geometric: Vec3d): Vec3d => {
+      const x = refracted[0] + (geometric[0] - refracted[0]) * geometricBlend;
+      const y = refracted[1] + (geometric[1] - refracted[1]) * geometricBlend;
+      const z = refracted[2] + (geometric[2] - refracted[2]) * geometricBlend;
+      const length = Math.hypot(x, y, z) || 1;
+      return [x / length, y / length, z / length];
+    };
+    const sunRay = rays.get("sun");
+    if (sunRay) {
+      const ray = blended(sky.sun.directionLocalThree, sunRay);
+      this.sunDisc.position.set(
+        ray[0] * BODY_SHELL_RENDER_RADIUS,
+        ray[1] * BODY_SHELL_RENDER_RADIUS,
+        ray[2] * BODY_SHELL_RENDER_RADIUS,
+      );
+      this.sunDisc.lookAt(0, 0, 0);
+      const sunGlowDistance = BODY_SHELL_RENDER_RADIUS * 0.98;
+      this.sunGlow.position.set(
+        ray[0] * sunGlowDistance,
+        ray[1] * sunGlowDistance,
+        ray[2] * sunGlowDistance,
+      );
+    }
+    const positionAttribute = this.planetPoints.geometry.getAttribute(
+      "position",
+    ) as THREE.BufferAttribute;
+    let changed = false;
+    sky.planets.forEach((planet, index) => {
+      const cameraRay = rays.get(planet.id);
+      if (!cameraRay) return;
+      const ray = blended(planet.directionLocalThree, cameraRay);
+      positionAttribute.setXYZ(
+        index,
+        ray[0] * STAR_SHELL_RENDER_RADIUS,
+        ray[1] * STAR_SHELL_RENDER_RADIUS,
+        ray[2] * STAR_SHELL_RENDER_RADIUS,
+      );
+      changed = true;
+    });
+    if (changed) positionAttribute.needsUpdate = true;
   }
 
   /**

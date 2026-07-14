@@ -47,6 +47,13 @@ export type SkyBodyState = {
   illuminatedFraction: number;
   /** Unit direction toward the body in the local Three frame. */
   directionLocalThree: Vec3d;
+  /**
+   * The same direction without atmospheric refraction. Refraction is a
+   * ground-atmosphere artifact; geometry reconstructed for a camera in space
+   * must start from this one (astronomy-engine's "normal" refraction lifts
+   * bodies ~0.5° even well below the horizon).
+   */
+  directionLocalThreeAirless: Vec3d;
   /** Physical mean radius, for true-size rendering. */
   radiusM: number;
   /** Heliocentric position in J2000 equatorial (EQJ) meters; [0,0,0] for the Sun. */
@@ -183,6 +190,7 @@ function computeBodyState(
     magnitude: illumination.mag,
     illuminatedFraction: definition.id === "sun" ? 1 : illumination.phase_fraction,
     directionLocalThree: altAzToLocalThree(apparent.altitude, apparent.azimuth),
+    directionLocalThreeAirless: altAzToLocalThree(geometric.altitude, geometric.azimuth),
     radiusM: definition.radiusM,
     helioEqjM: helioEqjAu
       ? [helioEqjAu.x * METERS_PER_AU, helioEqjAu.y * METERS_PER_AU, helioEqjAu.z * METERS_PER_AU]

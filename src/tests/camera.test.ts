@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { stepCriticalSpring } from "../camera/camera-spring";
 import {
-  cameraArcBlendForAltitude,
+  EARTH_SCREEN_OFFSET_RAD,
   earthMoonCompositionForAltitude,
-  eclipticRollBlendForAltitude,
   journeyCompositionForSlider,
+  REVEAL_NORTH_LIFT,
+  revealBlendForAltitude,
   systemCompositionForAltitude,
   wholeEarthFovDegForAspect,
 } from "../camera/camera-compositions";
@@ -81,56 +82,47 @@ describe("whole-Earth composition", () => {
     expect(wholeEarthFovDegForAspect(390 / 844)).toBeLessThanOrEqual(76);
   });
 
-  it("reaches the nadir gaze by the atmosphere landmark", () => {
+  it("settles the FOV by the atmosphere landmark", () => {
     expect(journeyCompositionForSlider(0)).toBe(0);
-    // Sweeping down through the ascent…
     expect(journeyCompositionForSlider(0.13)).toBeCloseTo(0.55, 12);
-    // …and looking straight at the observer's dot from the atmosphere on.
     expect(journeyCompositionForSlider(0.2)).toBe(1);
     expect(journeyCompositionForSlider(0.26)).toBe(1);
     expect(journeyCompositionForSlider(0.36)).toBe(1);
     expect(journeyCompositionForSlider(1)).toBe(1);
   });
 
-  it("arcs the camera off the zenith between the atmosphere and whole Earth", () => {
-    expect(cameraArcBlendForAltitude(2)).toBe(0);
-    expect(cameraArcBlendForAltitude(100_000)).toBe(0);
-    // One continuous motion with the roll: already turning through low orbit
-    // (nothing new starts there)…
-    expect(cameraArcBlendForAltitude(500_000)).toBeGreaterThan(0.1);
-    expect(cameraArcBlendForAltitude(500_000)).toBeLessThan(0.5);
-    expect(cameraArcBlendForAltitude(2_000_000)).toBeGreaterThan(0.3);
-    expect(cameraArcBlendForAltitude(2_000_000)).toBeLessThan(0.9);
-    // …and fully on the reveal vantage by whole Earth.
-    expect(cameraArcBlendForAltitude(20_000_000)).toBe(1);
-    expect(cameraArcBlendForAltitude(8_000_000_000_000)).toBe(1);
-    // Monotonic through the transition band, and in lockstep with the roll.
+  it("runs the reveal as one motion from ~10 km, settled before whole Earth", () => {
+    expect(revealBlendForAltitude(2)).toBe(0);
+    expect(revealBlendForAltitude(10_000)).toBe(0);
+    // The plane starts flattening on the way to the atmosphere…
+    expect(revealBlendForAltitude(100_000)).toBeGreaterThan(0.2);
+    expect(revealBlendForAltitude(100_000)).toBeLessThan(0.6);
+    // …keeps turning smoothly through low orbit (nothing new starts there)…
+    expect(revealBlendForAltitude(500_000)).toBeGreaterThan(0.5);
+    expect(revealBlendForAltitude(500_000)).toBeLessThan(0.95);
+    // …and is fully settled well before whole Earth: from there out the
+    // journey only zooms.
+    expect(revealBlendForAltitude(4_000_000)).toBe(1);
+    expect(revealBlendForAltitude(20_000_000)).toBe(1);
+    expect(revealBlendForAltitude(8_000_000_000_000)).toBe(1);
+    // Monotonic through the whole band.
     let previous = 0;
-    for (let exponent = 5; exponent <= 7.3; exponent += 0.1) {
-      const value = cameraArcBlendForAltitude(10 ** exponent);
+    for (let exponent = 4; exponent <= 6.6; exponent += 0.05) {
+      const value = revealBlendForAltitude(10 ** exponent);
       expect(value).toBeGreaterThanOrEqual(previous);
-      expect(value).toBeCloseTo(eclipticRollBlendForAltitude(10 ** exponent), 10);
       previous = value;
     }
   });
 
-  it("re-levels screen-up onto the ecliptic between the atmosphere and whole Earth", () => {
-    expect(eclipticRollBlendForAltitude(2)).toBe(0);
-    expect(eclipticRollBlendForAltitude(100_000)).toBe(0);
-    // Turning through low orbit…
-    expect(eclipticRollBlendForAltitude(500_000)).toBeGreaterThan(0.1);
-    expect(eclipticRollBlendForAltitude(500_000)).toBeLessThan(0.5);
-    // …and whole Earth arrives tilted against an already-flat ecliptic.
-    expect(eclipticRollBlendForAltitude(20_000_000)).toBe(1);
-    expect(eclipticRollBlendForAltitude(500_000_000)).toBe(1);
-    expect(eclipticRollBlendForAltitude(8_000_000_000_000)).toBe(1);
-    // Monotonic through the transition band.
-    let previous = 0;
-    for (let exponent = 5; exponent <= 7.3; exponent += 0.1) {
-      const value = eclipticRollBlendForAltitude(10 ** exponent);
-      expect(value).toBeGreaterThanOrEqual(previous);
-      previous = value;
-    }
+  it("keeps Earth right of center at a modest offset, near the plane", () => {
+    // ~18° of yaw keeps the planet clearly off-center without losing it at
+    // the whole-Earth FOV; ~8.5° of ecliptic latitude keeps the plane a
+    // near-flat line rather than a disc seen from above.
+    expect(EARTH_SCREEN_OFFSET_RAD).toBeGreaterThan(0.2);
+    expect(EARTH_SCREEN_OFFSET_RAD).toBeLessThan(0.5);
+    const elevationDeg = (Math.asin(REVEAL_NORTH_LIFT / Math.hypot(1, REVEAL_NORTH_LIFT)) * 180) / Math.PI;
+    expect(elevationDeg).toBeGreaterThan(4);
+    expect(elevationDeg).toBeLessThan(15);
   });
 
   it("widens the FOV to hold Earth and Moon without moving the gaze", () => {

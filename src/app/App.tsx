@@ -8,12 +8,12 @@ import { resolveObserverLocation } from "../location/observer-location";
 import { SpaceRenderer } from "../renderer/space-renderer";
 import { BodyInset } from "../ui/BodyInset";
 import { CompassRibbon } from "../ui/CompassRibbon";
-import { LayersPanel } from "../ui/LayersPanel";
 import { DebugPanel } from "../ui/DebugPanel";
 import { INTRO_STORAGE_KEY, IntroDialog } from "../ui/IntroDialog";
 import { MoonInset } from "../ui/MoonInset";
 import { ObserverChip } from "../ui/ObserverChip";
 import { ScaleSlider } from "../ui/ScaleSlider";
+import { SettingsDialog } from "../ui/SettingsDialog";
 import { useAppStore } from "./app-store";
 
 const observer = resolveObserverLocation(window.location.search, window.localStorage);
@@ -41,6 +41,7 @@ export function App() {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [rendererError, setRendererError] = useState<string | null>(null);
   const [showIntro, setShowIntro] = useState(showIntroInitially);
+  const [showSettings, setShowSettings] = useState(false);
   const telemetry = useAppStore((state) => state.telemetry);
   const openingTargetLabel = useAppStore((state) => state.openingTargetLabel);
   const currentLandmarkLabel = nearestLandmark(telemetry.currentDistanceM).label;
@@ -71,12 +72,11 @@ export function App() {
         </div>
         <div className="header-actions">
           <span className="backend-pill">{telemetry.backend}</span>
-          <LayersPanel />
           <button
             type="button"
             className="quiet-button"
-            aria-label="About & how to move"
-            onClick={() => setShowIntro(true)}
+            aria-label="Settings"
+            onClick={() => setShowSettings(true)}
           >
             {/* Lucide "sliders-horizontal", inlined (no runtime deps). */}
             <svg
@@ -113,6 +113,7 @@ export function App() {
       <DebugPanel flags={flags} />
 
       <IntroDialog open={showIntro} onClose={() => setShowIntro(false)} />
+      <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
 
       <p className="nonvisual-summary" aria-live="polite">
         Current scale domain: {telemetry.scaleDomain}. Renderer: {telemetry.backend}.

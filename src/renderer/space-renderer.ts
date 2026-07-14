@@ -21,10 +21,11 @@ import {
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
 import { formatDistanceParts } from "../camera/distance-format";
 import {
-  cameraArcBlendForAltitude,
+  EARTH_SCREEN_OFFSET_RAD,
   earthMoonCompositionForAltitude,
-  eclipticRollBlendForAltitude,
   journeyCompositionForSlider,
+  REVEAL_NORTH_LIFT,
+  revealBlendForAltitude,
   systemCompositionForAltitude,
   wholeEarthFovDegForAspect,
 } from "../camera/camera-compositions";
@@ -273,7 +274,7 @@ export class SpaceRenderer {
   /** Unit direction from Earth's center to the camera, local frame. */
   private readonly cameraDirLocal = new THREE.Vector3(0, 1, 0);
   private readonly arcQuaternion = new THREE.Quaternion();
-  private lastRollAngle: number | null = null;
+  private compassSmoothed: THREE.Quaternion | null = null;
   private moonGeoLocalM: Vec3d | null = null;
   private readoutElement: HTMLElement | null = null;
   private readoutLabelElement: HTMLElement | null = null;
@@ -507,10 +508,12 @@ export class SpaceRenderer {
     }
     this.bodyRadiusM.set("sun", sky.sun.radiusM);
     // Topocentric → earth-centered: the observer sits R above the center.
+    // The AIRLESS direction — refraction belongs to the ground view only,
+    // and this geometry serves cameras in space.
     this.bodyGeoLocalM.set("sun", [
-      sky.sun.directionLocalThree[0] * sky.sun.distanceM,
-      sky.sun.directionLocalThree[1] * sky.sun.distanceM + EARTH_MEAN_RADIUS_M,
-      sky.sun.directionLocalThree[2] * sky.sun.distanceM,
+      sky.sun.directionLocalThreeAirless[0] * sky.sun.distanceM,
+      sky.sun.directionLocalThreeAirless[1] * sky.sun.distanceM + EARTH_MEAN_RADIUS_M,
+      sky.sun.directionLocalThreeAirless[2] * sky.sun.distanceM,
     ]);
     // Geometric geocentric Moon from the same EQJ source as its orbit guide.
     this.moonGeoLocalM = rotateEqjToLocal(sky.eqjToLocalThree, moonGeoEqjM(utcMs) as Vec3d);
@@ -533,9 +536,10 @@ export class SpaceRenderer {
     this.sunAltitudeDeg = sky.sun.altitudeDeg;
     const eclipticNorthLocal = rotateEqjToLocal(sky.eqjToLocalThree, eclipticNorthEqj() as Vec3d);
     this.eclipticNorthLocal.set(...eclipticNorthLocal);
-    // Four "Plane of the solar system" captions spread around the ecliptic;
-    // the overlay projects them each frame and shows whichever face the view.
-    this.planeGuideAnchors = [10, 100, 190, 280].map((longitudeDeg) => ({
+    // Six "Plane of the solar system" captions spread around the ecliptic —
+    // dense enough that the below-horizon stretch always carries one too; the
+    // overlay projects them each frame and shows whichever face the view.
+    this.planeGuideAnchors = [10, 70, 130, 190, 250, 310].map((longitudeDeg) => ({
       direction: rotateEqjToLocal(sky.eqjToLocalThree, eclipticDirectionEqj(longitudeDeg) as Vec3d),
       directionAhead: rotateEqjToLocal(
         sky.eqjToLocalThree,
@@ -608,35 +612,38 @@ export class SpaceRenderer {
     const earthRadiusRender = earthRenderRadiusForAltitude(altitudeM);
     const renderUnitsPerMeter = renderUnitsPerMeterForAltitude(altitudeM);
 
-    // The reveal arc: past the atmosphere the camera leaves the zenith ray
-    // and swings around the planet to an anti-sunward vantage raised above
-    // the ecliptic — Earth stands alone in frame with the observer's dot on
-    // its side and the Sun and inner system in the background, day or night.
-    const arcBlend = cameraArcBlendForAltitude(altitudeM);
-    const rollBlend = eclipticRollBlendForAltitude(altitudeM);
+    // The reveal is ONE motion (see revealBlendForAltitude): the camera
+    // leaves the zenith ray for a near-side-on anti-sunward vantage barely
+    // above the ecliptic, while the frame eases toward "plane flat across
+    // the background, Earth off to the right with the observer's dot on it".
+    const revealBlend = revealBlendForAltitude(altitudeM);
+    // The physical heliocentric layer takes over from the sky proxies as the
+    // journey approaches interplanetary scale (this also fades Earth's
+    // screen offset back to center for the final frames).
+    const systemReveal = smoothstep(1e9, 8e9, altitudeM);
     this.cameraDirLocal.set(0, 1, 0);
     this.arcQuaternion.identity();
-    if (arcBlend > 0.001) {
+    if (revealBlend > 0.001) {
       const revealDir = new THREE.Vector3()
         .copy(this.sunDirectionLocal)
         .multiplyScalar(-1)
-        .addScaledVector(this.eclipticNorthLocal, 0.45)
+        .addScaledVector(this.eclipticNorthLocal, REVEAL_NORTH_LIFT)
         .normalize();
       const fullArc = new THREE.Quaternion().setFromUnitVectors(this.cameraDirLocal, revealDir);
-      this.arcQuaternion.slerp(fullArc, arcBlend);
+      this.arcQuaternion.slerp(fullArc, revealBlend);
       this.cameraDirLocal.applyQuaternion(this.arcQuaternion);
     }
 
-    // Beyond whole Earth a drag orbits the vantage around Earth instead of
+    // Beyond the reveal a drag orbits the vantage around Earth instead of
     // panning the gaze: the same yaw/pitch offsets rotate the whole base
-    // frame about Earth's center. Blended with the arc, the on-screen drag
+    // frame about Earth's center. Blended with the reveal, the on-screen drag
     // feel stays continuous — pure look at the ground, pure orbit out here.
-    const orbitBlend = arcBlend;
+    const orbitBlend = revealBlend;
     if (orbitBlend > 0.001 && (this.yawOffset !== 0 || this.pitchOffset !== 0)) {
       const gaze = this.cameraDirLocal.clone().multiplyScalar(-1);
-      const upAxis = new THREE.Vector3(0, 1 - rollBlend, 0).addScaledVector(
+      const upAxis = new THREE.Vector3(0, 1 - revealBlend, 0).addScaledVector(
         this.eclipticNorthLocal,
-        rollBlend,
+        revealBlend,
       );
       upAxis.addScaledVector(gaze, -upAxis.dot(gaze));
       if (upAxis.lengthSq() > 1e-8) {
@@ -721,9 +728,6 @@ export class SpaceRenderer {
     this.objects.atmosphereOutside.visible = false;
     this.objects.coordinateGrid.visible = layers["sky-grid"];
 
-    // The physical heliocentric layer takes over from the sky proxies as the
-    // journey approaches interplanetary scale.
-    const systemReveal = smoothstep(1e9, 8e9, altitudeM);
     this.skyLayer?.updateAltitude(
       altitudeM,
       this.sunAltitudeDeg,
@@ -801,10 +805,10 @@ export class SpaceRenderer {
 
     const composition = journeyCompositionForSlider(normalizedScale);
 
-    // Base gaze: sweep to nadir by the atmosphere landmark and stay pinned on
-    // Earth for the rest of the journey — the Moon and then the whole system
-    // enter the frame purely by the FOV widening, so the pull-out never spins.
-    const basePitchRad = (-Math.PI / 2) * composition;
+    // The gaze never detours to the nadir: the frame eases straight from the
+    // ground's free look into the reveal frame (built below), and the Moon
+    // and then the whole system enter purely by the FOV widening.
+    const basePitchRad = 0;
     const baseYawRad = 0;
     let baseFovDeg = THREE.MathUtils.lerp(
       58,
@@ -829,10 +833,15 @@ export class SpaceRenderer {
       }
     }
 
-    // Phone look: near the ground, ease the view onto where the device
-    // physically points — heading always, pitch when the platform reports it.
+    // Phone look fallback (no full attitude available): ease the view onto
+    // the reported heading/pitch. The quaternion path below supersedes this.
     const compassHeadingDeg = appState.compassHeadingDeg;
-    if (compassHeadingDeg !== null && this.pointerId === null && altitudeM < 200_000) {
+    if (
+      compassHeadingDeg !== null &&
+      appState.compassQuaternion === null &&
+      this.pointerId === null &&
+      altitudeM < 200_000
+    ) {
       const targetYaw = wrapAngleRad(-THREE.MathUtils.degToRad(compassHeadingDeg) - baseYawRad);
       const ease = 1 - Math.exp(-4 * deltaSeconds);
       this.yawOffset += wrapAngleRad(targetYaw - this.yawOffset) * ease;
@@ -847,42 +856,29 @@ export class SpaceRenderer {
       }
     }
 
-    const baseQuaternion = new THREE.Quaternion()
-      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), baseYawRad)
-      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), basePitchRad))
-      // The reveal arc carries the whole base frame around the planet, so the
-      // gaze stays pinned on Earth's center for free.
-      .premultiply(this.arcQuaternion);
+    const baseQuaternion = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      baseYawRad,
+    );
 
-    // The reveal: screen-up rolls from the observer's zenith to ecliptic
-    // north on the way out, so the solar system's plane settles flat while
-    // your ground visibly tilts — you were standing on the side of a planet.
-    if (rollBlend > 0.001) {
-      const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(baseQuaternion);
-      const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(baseQuaternion);
-      const desiredUp = this.eclipticNorthLocal
-        .clone()
-        .addScaledVector(gaze, -this.eclipticNorthLocal.dot(gaze));
-      if (desiredUp.lengthSq() > 1e-8) {
-        desiredUp.normalize();
-        let rollAngle = Math.atan2(
-          new THREE.Vector3().crossVectors(currentUp, desiredUp).dot(gaze),
-          currentUp.dot(desiredUp),
-        );
-        // Unwrap against the previous frame: near ±180° the shortest-path
-        // sign is ambiguous, and a raw atan2 can flip it frame to frame —
-        // the roll must keep turning the same way for the whole journey.
-        if (this.lastRollAngle !== null) {
-          rollAngle +=
-            2 * Math.PI * Math.round((this.lastRollAngle - rollAngle) / (2 * Math.PI));
-        }
-        this.lastRollAngle = rollAngle;
-        baseQuaternion.premultiply(
-          new THREE.Quaternion().setFromAxisAngle(gaze, rollAngle * rollBlend),
-        );
-      }
-    } else {
-      this.lastRollAngle = null;
+    // The reveal frame: screen-up on ecliptic north (the plane of the solar
+    // system lies flat across the background) with Earth standing off to the
+    // RIGHT of center, your dot on its side — one slerp from the ground's
+    // free-look frame, so up-rolling and re-aiming arrive together as a
+    // single motion with no nadir detour and no direction reversals.
+    if (revealBlend > 0.001) {
+      const earthDir = this.cameraDirLocal.clone().multiplyScalar(-1);
+      const gazeTarget = earthDir.applyAxisAngle(
+        this.eclipticNorthLocal,
+        EARTH_SCREEN_OFFSET_RAD * (1 - systemReveal),
+      );
+      const lookMatrix = new THREE.Matrix4().lookAt(
+        new THREE.Vector3(0, 0, 0),
+        gazeTarget,
+        this.eclipticNorthLocal,
+      );
+      const revealQuaternion = new THREE.Quaternion().setFromRotationMatrix(lookMatrix);
+      baseQuaternion.slerp(revealQuaternion, revealBlend);
     }
 
     // Marker-click look-at: ease the free-look offsets toward the body. The
@@ -922,7 +918,40 @@ export class SpaceRenderer {
         ),
       );
     this.camera.quaternion.copy(baseQuaternion).multiply(userQuaternion);
+
+    // Compass mode with a full attitude: drive the camera by the device
+    // quaternion (smoothed), which sails through the zenith with no flip —
+    // heading+pitch decomposition is gimbal-locked straight up. The free-look
+    // offsets are kept in sync so leaving compass mode never jumps the view.
+    const compassQuaternion = appState.compassQuaternion;
+    if (compassQuaternion !== null && this.pointerId === null && altitudeM < 200_000) {
+      const target = new THREE.Quaternion(...compassQuaternion);
+      this.compassSmoothed ??= this.camera.quaternion.clone();
+      this.compassSmoothed.slerp(target, 1 - Math.exp(-7 * deltaSeconds));
+      const groundWeight = 1 - smoothstep(100_000, 200_000, altitudeM);
+      this.camera.quaternion.slerp(this.compassSmoothed, groundWeight);
+      const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+      this.yawOffset = Math.atan2(-gaze.x, -gaze.z) - baseYawRad;
+      this.pitchOffset = Math.asin(THREE.MathUtils.clamp(gaze.y, -1, 1));
+    } else {
+      this.compassSmoothed = null;
+    }
+
     this.camera.fov = baseFovDeg;
+    // Once the heliocentric layer is visible the far plane stretches to hold
+    // the WHOLE system (Pluto's aphelion) so orbit lines never get clipped
+    // into a "drawing themselves" sweep; the near plane scales with it, so
+    // depth precision is unchanged. Everything beyond the default far is
+    // transparent while systemReveal is 0, so the gate itself is invisible.
+    const plutoAphelionM = 7.38e12;
+    const orbitFarUnits = plutoAphelionM * renderUnitsPerMeter * 1.15;
+    if (systemReveal > 0.001 && orbitFarUnits > 50_000) {
+      this.camera.far = orbitFarUnits;
+      this.camera.near = 0.00001 * (orbitFarUnits / 50_000);
+    } else {
+      this.camera.far = 50_000;
+      this.camera.near = 0.00001;
+    }
     this.camera.updateProjectionMatrix();
 
     // Sky brightness falls with altitude and with the Sun below the horizon.
@@ -954,6 +983,19 @@ export class SpaceRenderer {
     }
 
     const headingDeg = ((-THREE.MathUtils.radToDeg(baseYawRad + this.yawOffset) % 360) + 360) % 360;
+    // Sky proxies track the camera's true position every frame so the
+    // physical heliocentric bodies fade in exactly on top of them. Near the
+    // ground they keep the refracted directions your eye actually sees; the
+    // refraction blends out on the same band as the Moon's placement.
+    if (this.skyState) {
+      const proxyRays = new Map<string, Vec3d>();
+      for (const [bodyId, geoLocalM] of this.bodyGeoLocalM) {
+        proxyRays.set(bodyId, this.rayFromGeoLocal(geoLocalM, altitudeM).ray);
+      }
+      const geometricBlend = smoothstep(1_000_000, 10_000_000, altitudeM);
+      this.skyLayer?.updateProxyDirections(proxyRays, this.skyState, geometricBlend);
+    }
+
     const overrides = new Map<string, MoonMarkerOverride>();
     const apparentRadiusDeg = (radiusM: number, distanceM: number) =>
       (Math.asin(Math.min(1, radiusM / Math.max(radiusM, distanceM))) * 180) / Math.PI;

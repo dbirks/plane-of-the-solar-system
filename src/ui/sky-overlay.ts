@@ -89,7 +89,7 @@ export class SkyOverlay {
         element.className = "sky-marker";
         element.dataset["body"] = body.id;
         const ring = document.createElement("span");
-        ring.className = "sky-marker-dot";
+        ring.className = "sky-marker-pointer";
         const label = document.createElement("span");
         label.className = "sky-marker-label";
         label.textContent = body.label;
@@ -208,9 +208,15 @@ export class SkyOverlay {
         }
         if (entry.element.style.display === "none") entry.element.style.display = "";
         entry.element.classList.toggle("sky-marker--edge", atEdge);
-        // A body whose disc is plainly visible on screen needs no dot — the
-        // label alone tags it (no circle around the whole Earth or near Moon).
-        // Edge-pinned markers keep the dot: the disc itself is out of view.
+        if (atEdge) {
+          // Edge arrows point off-screen toward the body: rotation measured
+          // from "pointing down", clockwise, in screen coordinates.
+          const rotationDeg = (Math.atan2(ndcX, -ndcY) * 180) / Math.PI;
+          entry.element.style.setProperty("--edge-rotation", `${rotationDeg.toFixed(1)}deg`);
+        }
+        // A body whose disc is plainly visible on screen needs no pointer —
+        // the label alone tags it (nothing drawn around the whole Earth or
+        // near Moon). Edge-pinned markers keep theirs: the disc is out of view.
         const resolved =
           apparentRadiusDeg > 0.175 &&
           !atEdge &&
@@ -344,8 +350,11 @@ export class SkyOverlay {
       const slopeDeg = (Math.atan2(aheadY - screenY, aheadX - screenX) * 180) / Math.PI;
       // Keep the text upright: flip when the band runs right-to-left.
       const uprightDeg = slopeDeg > 90 ? slopeDeg - 180 : slopeDeg < -90 ? slopeDeg + 180 : slopeDeg;
+      // Below the horizon the caption rides the dotted continuation, dimmed
+      // to match it.
+      const belowHorizonDim = anchor.direction[1] < 0 ? 0.7 : 1;
       caption.style.display = "";
-      caption.style.opacity = (opacity * edgeFade).toFixed(3);
+      caption.style.opacity = (opacity * edgeFade * belowHorizonDim).toFixed(3);
       caption.style.transform =
         `translate(${screenX.toFixed(1)}px, ${screenY.toFixed(1)}px) ` +
         `rotate(${uprightDeg.toFixed(2)}deg) translate(-50%, -50%)`;

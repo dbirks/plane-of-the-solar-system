@@ -26,15 +26,15 @@ test("slider reaches whole Earth and remains keyboard accessible", async ({ page
   await expect(page.getByText("Whole Earth", { exact: true }).first()).toBeVisible();
 });
 
-test("wheel changes scale and help exposes reduced motion", async ({ page }) => {
+test("wheel changes scale and the settings dialog opens from the header", async ({ page }) => {
   await page.goto(fixedScenario);
   await page.locator("canvas").hover();
   await page.mouse.wheel(0, 700);
   await expect
     .poll(async () => page.getByRole("slider").getAttribute("aria-valuetext"))
     .not.toBe("Altitude · 820 ft");
-  await page.getByRole("button", { name: "About & how to move" }).click();
-  await expect(page.getByRole("checkbox", { name: "Gentler camera (less motion)" })).toBeVisible();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 });
 
 test("canvas supports drag navigation", async ({ page }) => {

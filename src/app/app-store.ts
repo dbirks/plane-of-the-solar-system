@@ -79,6 +79,11 @@ type AppState = {
   compassHeadingDeg: number | null;
   /** Live device pitch (0 horizon, +90 zenith), or null when unavailable. */
   compassPitchDeg: number | null;
+  /**
+   * Full device attitude for the camera (local-frame quaternion [x,y,z,w]).
+   * Preferred over heading+pitch: it has no zenith gimbal lock.
+   */
+  compassQuaternion: [number, number, number, number] | null;
   /** True while the shared phone-look session streams device orientation. */
   phoneLookActive: boolean;
   reducedMotion: boolean;
@@ -88,7 +93,11 @@ type AppState = {
   setOpeningTargetLabel: (label: string) => void;
   setSelectedBodyId: (bodyId: SkyBodyId | null) => void;
   setLayer: (layer: LayerId, enabled: boolean) => void;
-  setCompassLook: (headingDeg: number | null, pitchDeg: number | null) => void;
+  setCompassLook: (
+    headingDeg: number | null,
+    pitchDeg: number | null,
+    quaternion?: [number, number, number, number] | null,
+  ) => void;
   setPhoneLookActive: (active: boolean) => void;
   setReducedMotion: (enabled: boolean) => void;
 };
@@ -119,6 +128,7 @@ export const useAppStore = create<AppState>((set) => ({
   layers: DEFAULT_LAYERS,
   compassHeadingDeg: null,
   compassPitchDeg: null,
+  compassQuaternion: null,
   phoneLookActive: false,
   reducedMotion:
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -128,8 +138,8 @@ export const useAppStore = create<AppState>((set) => ({
   setOpeningTargetLabel: (openingTargetLabel) => set({ openingTargetLabel }),
   setSelectedBodyId: (selectedBodyId) => set({ selectedBodyId }),
   setLayer: (layer, enabled) => set((state) => ({ layers: { ...state.layers, [layer]: enabled } })),
-  setCompassLook: (compassHeadingDeg, compassPitchDeg) =>
-    set({ compassHeadingDeg, compassPitchDeg }),
+  setCompassLook: (compassHeadingDeg, compassPitchDeg, compassQuaternion = null) =>
+    set({ compassHeadingDeg, compassPitchDeg, compassQuaternion }),
   setPhoneLookActive: (phoneLookActive) => set({ phoneLookActive }),
   setReducedMotion: (reducedMotion) => set({ reducedMotion }),
 }));

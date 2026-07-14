@@ -10,10 +10,9 @@ export function wholeEarthFovDegForAspect(viewportAspect: number): number {
   return Math.min(76, (verticalFovRadians * 180) / Math.PI);
 }
 
-// The gaze sweeps from the horizon at ground level to straight down at the
-// observer's dot by the atmosphere landmark (sliderT 0.2) — the journey is
-// "look at where you are standing" almost immediately, and every scale
-// beyond keeps Earth centered while the vantage swings around it.
+// Drives only the FOV settle now (58° near the ground to the whole-Earth
+// framing): the gaze itself never detours to the nadir — it eases straight
+// into the reveal frame (see revealBlendForAltitude).
 const COMPOSITION_ANCHORS = [
   { sliderT: 0, composition: 0 },
   { sliderT: 0.05, composition: 0.05 },
@@ -80,34 +79,31 @@ export function systemCompositionForAltitude(altitudeM: number, baseFovDeg: numb
 }
 
 /**
- * How strongly screen-up re-levels from the observer's zenith to ecliptic
- * north on the outward journey (0 through the atmosphere, 1 by the whole
- * Earth landmark). This roll is the "I was standing on the side of a planet"
- * reveal: the world turns beneath you through low orbit, and whole Earth
- * arrives visibly tilted against a solar-system plane that is already flat.
+ * The whole reveal is ONE motion, and this is its progress. From about 10 km
+ * up, the camera frame eases from the ground's free-look frame straight into
+ * the reveal frame: screen-up on ecliptic north (the plane of the solar
+ * system reads flat almost immediately), the plane stretching across the
+ * background, and Earth standing off to the RIGHT of center with the
+ * observer's dot on its side. Fully settled well before whole Earth — from
+ * there out, nothing re-aims; the frame only zooms.
  */
-export function eclipticRollBlendForAltitude(altitudeM: number): number {
+export function revealBlendForAltitude(altitudeM: number): number {
   const logAltitude = Math.log10(Math.max(1, altitudeM));
-  const t = Math.min(1, Math.max(0, (logAltitude - 5) / (7.3 - 5)));
+  const t = Math.min(1, Math.max(0, (logAltitude - 4) / (6.6 - 4)));
   return t * t * (3 - 2 * t);
 }
 
 /**
- * How far the camera has swung off the observer's zenith ray toward the
- * reveal vantage (anti-sunward, raised above the ecliptic). 0 through the
- * atmosphere — the pull-out starts straight above your head — and 1 by
- * whole Earth: the planet stands alone with your dot on its side and the
- * Sun and inner system in the background, day or night alike.
+ * How far Earth sits right of the frame center during the reveal (radians of
+ * gaze yaw). Fades back to center as the heliocentric system takes over so
+ * the final 80 AU frame stays centered on the Sun–Earth line.
  */
-export function cameraArcBlendForAltitude(altitudeM: number): number {
-  // The arc shares the roll's whole band (atmosphere → whole Earth) so the
-  // pull-out is ONE continuous motion — nothing new starts at low orbit, and
-  // the gaze leaves the nadir as soon as the roll begins, which keeps the
-  // roll's screen-up projection well-conditioned.
-  const logAltitude = Math.log10(Math.max(1, altitudeM));
-  const t = Math.min(1, Math.max(0, (logAltitude - 5) / (7.3 - 5)));
-  return t * t * (3 - 2 * t);
-}
+export const EARTH_SCREEN_OFFSET_RAD = 0.32;
+
+/** Camera vantage above the ecliptic during the reveal (unitless mix toward
+ * ecliptic north; ~8.5° of ecliptic latitude — a near-side-on view so the
+ * plane reads as a flat line, not a disc seen from above). */
+export const REVEAL_NORTH_LIFT = 0.15;
 
 function lerp(start: number, end: number, amount: number): number {
   return start + (end - start) * amount;
