@@ -184,14 +184,14 @@ export class SolarSystemLayer {
 
   /** Per-frame anchoring, system-scale reveal, and layer gating. */
   updateFrame(
-    earthCenterRenderY: number,
+    earthCenterRender: THREE.Vector3,
     renderUnitsPerMeter: number,
     reveal: number,
     gates: { orbitLines: boolean; eclipticRings: boolean },
   ): void {
     this.group.visible = reveal > 0.003;
     if (!this.group.visible) return;
-    this.group.position.set(0, earthCenterRenderY, 0);
+    this.group.position.copy(earthCenterRender);
     this.group.scale.setScalar(renderUnitsPerMeter);
     for (const line of this.fadeLines) {
       const enabled = line.userData["kind"] === "ecliptic" ? gates.eclipticRings : gates.orbitLines;

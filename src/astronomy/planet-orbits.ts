@@ -92,3 +92,16 @@ export function eclipticNorthEqj(): readonly [number, number, number] {
   const { rot } = Rotation_ECL_EQJ();
   return [rot[2]![0]!, rot[2]![1]!, rot[2]![2]!];
 }
+
+/** Unit vector toward a point on the ecliptic at the given longitude, in EQJ. */
+export function eclipticDirectionEqj(longitudeDeg: number): readonly [number, number, number] {
+  const { rot } = Rotation_ECL_EQJ();
+  const angle = (longitudeDeg * Math.PI) / 180;
+  const x = Math.cos(angle);
+  const y = Math.sin(angle);
+  return [
+    rot[0]![0]! * x + rot[1]![0]! * y,
+    rot[0]![1]! * x + rot[1]![1]! * y,
+    rot[0]![2]! * x + rot[1]![2]! * y,
+  ];
+}

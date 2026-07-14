@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { stepCriticalSpring } from "../camera/camera-spring";
 import {
+  cameraArcBlendForAltitude,
   earthMoonCompositionForAltitude,
   eclipticRollBlendForAltitude,
   journeyCompositionForSlider,
@@ -31,10 +32,12 @@ describe("logarithmic journey scale", () => {
 
   it("uses perceptual logarithmic anchors for a responsive ascent", () => {
     expect(distanceToSlider(1_000)).toBeCloseTo(0.1, 12);
-    expect(distanceToSlider(100_000)).toBeCloseTo(0.24, 12);
-    expect(distanceToSlider(500_000)).toBeCloseTo(0.36, 12);
-    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.6, 12);
-    expect(distanceToSlider(500_000_000)).toBeCloseTo(0.76, 12);
+    expect(distanceToSlider(100_000)).toBeCloseTo(0.22, 12);
+    expect(distanceToSlider(500_000)).toBeCloseTo(0.29, 12);
+    // The quiet atmosphere → whole-Earth leg is compressed; the journey
+    // beyond, where the system assembles, owns most of the slider.
+    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.42, 12);
+    expect(distanceToSlider(500_000_000)).toBeCloseTo(0.6, 12);
     expect(JOURNEY_LANDMARKS.at(-1)).toMatchObject({
       id: "full-system",
       distanceM: 8_000_000_000_000,
@@ -79,12 +82,28 @@ describe("whole-Earth composition", () => {
   it("reaches the nadir gaze by the atmosphere landmark", () => {
     expect(journeyCompositionForSlider(0)).toBe(0);
     // Sweeping down through the ascent…
-    expect(journeyCompositionForSlider(0.15)).toBeCloseTo(0.55, 12);
+    expect(journeyCompositionForSlider(0.14)).toBeCloseTo(0.55, 12);
     // …and looking straight at the observer's dot from the atmosphere on.
-    expect(journeyCompositionForSlider(0.24)).toBe(1);
-    expect(journeyCompositionForSlider(0.36)).toBe(1);
-    expect(journeyCompositionForSlider(0.6)).toBe(1);
+    expect(journeyCompositionForSlider(0.22)).toBe(1);
+    expect(journeyCompositionForSlider(0.29)).toBe(1);
+    expect(journeyCompositionForSlider(0.42)).toBe(1);
     expect(journeyCompositionForSlider(1)).toBe(1);
+  });
+
+  it("arcs the camera off the zenith between the atmosphere and whole Earth", () => {
+    expect(cameraArcBlendForAltitude(2)).toBe(0);
+    expect(cameraArcBlendForAltitude(100_000)).toBe(0);
+    expect(cameraArcBlendForAltitude(500_000)).toBeGreaterThan(0.05);
+    expect(cameraArcBlendForAltitude(500_000)).toBeLessThan(0.5);
+    expect(cameraArcBlendForAltitude(20_000_000)).toBe(1);
+    expect(cameraArcBlendForAltitude(8_000_000_000_000)).toBe(1);
+    // Monotonic through the transition band.
+    let previous = 0;
+    for (let exponent = 5.3; exponent <= 7.3; exponent += 0.1) {
+      const value = cameraArcBlendForAltitude(10 ** exponent);
+      expect(value).toBeGreaterThanOrEqual(previous);
+      previous = value;
+    }
   });
 
   it("re-levels screen-up onto the ecliptic between the atmosphere and whole Earth", () => {
@@ -108,15 +127,18 @@ describe("whole-Earth composition", () => {
 
   it("widens the FOV to hold Earth and Moon without moving the gaze", () => {
     const moonRay = [0.6, -0.35, -0.72] as const;
-    const nearWholeEarth = earthMoonCompositionForAltitude(20_000_000, moonRay, 46);
-    const atEarthMoon = earthMoonCompositionForAltitude(500_000_000, moonRay, 46);
+    const gazeDown = [0, -1, 0] as const;
+    const nearWholeEarth = earthMoonCompositionForAltitude(20_000_000, moonRay, gazeDown, 46);
+    const atEarthMoon = earthMoonCompositionForAltitude(500_000_000, moonRay, gazeDown, 46);
     expect(nearWholeEarth.blend).toBeLessThan(0.3);
     expect(atEarthMoon.blend).toBe(1);
-    // Moon 69.5° off nadir → FOV covers it, capped for sanity.
+    // Moon 69.5° off the gaze → FOV covers it, capped for sanity.
     expect(atEarthMoon.fovDeg).toBeGreaterThan(46);
     expect(atEarthMoon.fovDeg).toBeLessThanOrEqual(100);
-    // A Moon nearly below keeps the base FOV.
-    expect(earthMoonCompositionForAltitude(500_000_000, [0.1, -0.99, 0.1], 46).fovDeg).toBe(46);
+    // A Moon nearly along the gaze keeps the base FOV.
+    expect(
+      earthMoonCompositionForAltitude(500_000_000, [0.1, -0.99, 0.1], gazeDown, 46).fovDeg,
+    ).toBe(46);
   });
 
   it("opens toward the system FOV with no gaze target change", () => {

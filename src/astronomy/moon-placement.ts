@@ -24,22 +24,22 @@ export type MoonPlacement = {
 };
 
 /**
- * Place the Moon for a camera `altitudeM` above the ground observer. The
- * camera rises along the observer's zenith (+Y in the local frame), so the
- * apparent Moon direction gains real parallax as altitude grows; the Earth–Moon
- * distance is never compressed once the placement is physical.
+ * Place the Moon for a camera at `cameraFromGroundM` (local-frame meters
+ * relative to the ground observer — historically straight up the zenith, now
+ * anywhere on the reveal arc). `moonFromGroundM` is the Moon's position
+ * relative to the same observer. The apparent Moon direction gains real
+ * parallax as the camera moves; the Earth–Moon distance is never compressed
+ * once the placement is physical.
  */
 export function computeMoonPlacement(
-  moonDirectionLocalThree: Vec3d,
-  moonTopocentricDistanceM: number,
-  altitudeM: number,
+  moonFromGroundM: Vec3d,
+  cameraFromGroundM: Vec3d,
   renderUnitsPerMeter: number,
 ): MoonPlacement {
-  const moonFromGroundM = scaleVec3d(moonDirectionLocalThree, moonTopocentricDistanceM);
   const fromCameraM: Vec3d = [
-    moonFromGroundM[0],
-    moonFromGroundM[1] - altitudeM,
-    moonFromGroundM[2],
+    moonFromGroundM[0] - cameraFromGroundM[0],
+    moonFromGroundM[1] - cameraFromGroundM[1],
+    moonFromGroundM[2] - cameraFromGroundM[2],
   ];
   const cameraDistanceM = Math.hypot(fromCameraM[0], fromCameraM[1], fromCameraM[2]);
   const rayLocal = scaleVec3d(fromCameraM, 1 / cameraDistanceM);

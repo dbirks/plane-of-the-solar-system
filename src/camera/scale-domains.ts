@@ -19,24 +19,27 @@ export type ScaleLandmark = {
 export const JOURNEY_MIN_DISTANCE_M = 2;
 export const JOURNEY_MAX_DISTANCE_M = 8_000_000_000_000;
 
+// The atmosphere → whole-Earth leg is deliberately quick (little to see while
+// the ground blurs away below); the majority of the slider belongs to the
+// journey beyond, where the Moon and then the solar system assemble.
 export const JOURNEY_LANDMARKS: readonly ScaleLandmark[] = [
   { id: "ground", label: "Ground", distanceM: 2, sliderT: 0 },
-  { id: "atmosphere", label: "Atmosphere", distanceM: 100_000, sliderT: 0.24 },
-  { id: "low-orbit", label: "Low orbit", distanceM: 500_000, sliderT: 0.36 },
-  { id: "whole-earth", label: "Whole Earth", distanceM: 20_000_000, sliderT: 0.6 },
-  { id: "earth-moon", label: "Earth–Moon", distanceM: 500_000_000, sliderT: 0.76 },
-  { id: "inner-system", label: "Inner system", distanceM: 400_000_000_000, sliderT: 0.89 },
+  { id: "atmosphere", label: "Atmosphere", distanceM: 100_000, sliderT: 0.22 },
+  { id: "low-orbit", label: "Low orbit", distanceM: 500_000, sliderT: 0.29 },
+  { id: "whole-earth", label: "Whole Earth", distanceM: 20_000_000, sliderT: 0.42 },
+  { id: "earth-moon", label: "Earth–Moon", distanceM: 500_000_000, sliderT: 0.6 },
+  { id: "inner-system", label: "Inner system", distanceM: 400_000_000_000, sliderT: 0.82 },
   { id: "full-system", label: "Solar system", distanceM: JOURNEY_MAX_DISTANCE_M, sliderT: 1 },
 ];
 
 const JOURNEY_SCALE_ANCHORS = [
   { sliderT: 0, distanceM: JOURNEY_MIN_DISTANCE_M },
   { sliderT: 0.1, distanceM: 1_000 },
-  { sliderT: 0.24, distanceM: 100_000 },
-  { sliderT: 0.36, distanceM: 500_000 },
-  { sliderT: 0.6, distanceM: 20_000_000 },
-  { sliderT: 0.76, distanceM: 500_000_000 },
-  { sliderT: 0.89, distanceM: 400_000_000_000 },
+  { sliderT: 0.22, distanceM: 100_000 },
+  { sliderT: 0.29, distanceM: 500_000 },
+  { sliderT: 0.42, distanceM: 20_000_000 },
+  { sliderT: 0.6, distanceM: 500_000_000 },
+  { sliderT: 0.82, distanceM: 400_000_000_000 },
   { sliderT: 1, distanceM: JOURNEY_MAX_DISTANCE_M },
 ] as const;
 

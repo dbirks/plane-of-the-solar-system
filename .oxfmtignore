@@ -6,3 +6,4 @@ playwright-report
 pnpm-lock.yaml
 SPEC.md
 src/scene/sky/star-catalog.ts
+src/location/place-catalog.ts

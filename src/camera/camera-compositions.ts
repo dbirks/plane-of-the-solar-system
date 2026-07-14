@@ -11,14 +11,14 @@ export function wholeEarthFovDegForAspect(viewportAspect: number): number {
 }
 
 // The gaze sweeps from the horizon at ground level to straight down at the
-// observer's dot by the atmosphere landmark (sliderT 0.24) — the journey is
+// observer's dot by the atmosphere landmark (sliderT 0.22) — the journey is
 // "look at where you are standing" almost immediately, and every scale
-// beyond simply pulls that view further away.
+// beyond keeps Earth centered while the vantage swings around it.
 const COMPOSITION_ANCHORS = [
   { sliderT: 0, composition: 0 },
-  { sliderT: 0.06, composition: 0.05 },
-  { sliderT: 0.15, composition: 0.55 },
-  { sliderT: 0.24, composition: 1 },
+  { sliderT: 0.055, composition: 0.05 },
+  { sliderT: 0.14, composition: 0.55 },
+  { sliderT: 0.22, composition: 1 },
   { sliderT: 1, composition: 1 },
 ] as const;
 
@@ -44,20 +44,23 @@ export type FramingWiden = {
 /**
  * Beyond whole Earth the gaze stays pinned on Earth — no yaw or pitch swing,
  * ever — and only the FOV widens so the Moon (at `moonRayLocal`, true
- * distance) shares the frame with the planet below.
+ * distance) shares the frame with the planet. `gazeLocal` is the unit
+ * direction the guided camera looks along (toward Earth's center).
  */
 export function earthMoonCompositionForAltitude(
   altitudeM: number,
   moonRayLocal: Vec3d,
+  gazeLocal: Vec3d,
   baseFovDeg: number,
 ): FramingWiden {
   const logAltitude = Math.log10(Math.max(1, altitudeM));
   const blendT = Math.min(1, Math.max(0, (logAltitude - 7.5) / (8.5 - 7.5)));
   const blend = blendT * blendT * (3 - 2 * blendT);
 
-  // Angle between the nadir gaze and the Moon's direction.
-  const separationDeg =
-    (Math.acos(Math.min(1, Math.max(-1, -moonRayLocal[1]))) * 180) / Math.PI;
+  // Angle between the Earth-pinned gaze and the Moon's direction.
+  const separationCos =
+    moonRayLocal[0] * gazeLocal[0] + moonRayLocal[1] * gazeLocal[1] + moonRayLocal[2] * gazeLocal[2];
+  const separationDeg = (Math.acos(Math.min(1, Math.max(-1, separationCos))) * 180) / Math.PI;
   const fovDeg = Math.min(100, Math.max(baseFovDeg, separationDeg * 2.2 + 8));
 
   return { blend, fovDeg };
@@ -86,6 +89,19 @@ export function systemCompositionForAltitude(altitudeM: number, baseFovDeg: numb
 export function eclipticRollBlendForAltitude(altitudeM: number): number {
   const logAltitude = Math.log10(Math.max(1, altitudeM));
   const t = Math.min(1, Math.max(0, (logAltitude - 5) / (7.3 - 5)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * How far the camera has swung off the observer's zenith ray toward the
+ * reveal vantage (anti-sunward, raised above the ecliptic). 0 through the
+ * atmosphere — the pull-out starts straight above your head — and 1 by
+ * whole Earth: the planet stands alone with your dot on its side and the
+ * Sun and inner system in the background, day or night alike.
+ */
+export function cameraArcBlendForAltitude(altitudeM: number): number {
+  const logAltitude = Math.log10(Math.max(1, altitudeM));
+  const t = Math.min(1, Math.max(0, (logAltitude - 5.3) / (7.3 - 5.3)));
   return t * t * (3 - 2 * t);
 }
 

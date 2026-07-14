@@ -32,3 +32,12 @@ Every later external asset must be recorded here with its exact version, source 
 - **Output path:** `public/textures/earth-night-2048.jpg` (176 KB)
 
 Both textures load asynchronously after the opening scene; the code-native flat-shaded globe remains the permanent fallback if loading fails. In-app credits appear in the Layers panel.
+
+## Place catalog (post-spec polish)
+
+- **Asset:** GeoNames `cities15000` dump, filtered to population ≥ 100,000 with city sections (PPLX) and abandoned places excluded — 5,807 places
+- **Source:** <https://download.geonames.org/export/dump/> (cities15000.zip)
+- **Author:** GeoNames (<https://www.geonames.org/>)
+- **License:** CC BY 4.0
+- **Processing:** `scripts/generate-place-catalog.mjs` → committed `src/location/place-catalog.ts` (name, coordinates, country/US-state); no network at build or runtime
+- **Use:** the observer chip shows "Near <city>" instead of raw coordinates — a coarse, privacy-friendly offline anchor (nothing ever leaves the device)

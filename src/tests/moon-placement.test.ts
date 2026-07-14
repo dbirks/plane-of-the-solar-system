@@ -11,15 +11,23 @@ import { renderUnitsPerMeterForAltitude } from "../camera/scale-domains";
 import type { Vec3d } from "../coordinates/vec3d";
 
 // Moon 30° up in the southern sky, at a typical topocentric distance.
-const MOON_DIRECTION: Vec3d = [0, Math.sin((30 * Math.PI) / 180), Math.cos((30 * Math.PI) / 180)];
 const MOON_DISTANCE_M = 384_400_000;
+const MOON_FROM_GROUND: Vec3d = [
+  0,
+  Math.sin((30 * Math.PI) / 180) * MOON_DISTANCE_M,
+  Math.cos((30 * Math.PI) / 180) * MOON_DISTANCE_M,
+];
+
+/** The historical straight-up camera path. */
+function zenithCameraM(altitudeM: number): Vec3d {
+  return [0, altitudeM, 0];
+}
 
 describe("computeMoonPlacement (units: meters and render units, frame: LOCAL_THREE)", () => {
   it("keeps the Moon on the proxy shell at ground altitude", () => {
     const placement = computeMoonPlacement(
-      MOON_DIRECTION,
-      MOON_DISTANCE_M,
-      2,
+      MOON_FROM_GROUND,
+      zenithCameraM(2),
       renderUnitsPerMeterForAltitude(2),
     );
     expect(placement.physical).toBe(false);
@@ -32,17 +40,35 @@ describe("computeMoonPlacement (units: meters and render units, frame: LOCAL_THR
   it("goes physical at high altitude with an uncompressed distance", () => {
     const altitudeM = 100_000_000;
     const scale = renderUnitsPerMeterForAltitude(altitudeM);
-    const placement = computeMoonPlacement(MOON_DIRECTION, MOON_DISTANCE_M, altitudeM, scale);
+    const placement = computeMoonPlacement(MOON_FROM_GROUND, zenithCameraM(altitudeM), scale);
     expect(placement.physical).toBe(true);
     // Round-trip: render distance divided by scale is the true camera distance.
     expect(placement.renderDistance / scale).toBeCloseTo(placement.cameraDistanceM, 4);
     // True camera distance follows the triangle between zenith travel and Moon.
     const expected = Math.hypot(
-      MOON_DIRECTION[0] * MOON_DISTANCE_M,
-      MOON_DIRECTION[1] * MOON_DISTANCE_M - altitudeM,
-      MOON_DIRECTION[2] * MOON_DISTANCE_M,
+      MOON_FROM_GROUND[0],
+      MOON_FROM_GROUND[1] - altitudeM,
+      MOON_FROM_GROUND[2],
     );
     expect(placement.cameraDistanceM).toBeCloseTo(expected, 4);
+  });
+
+  it("handles a camera off the zenith ray (the reveal arc)", () => {
+    const altitudeM = 100_000_000;
+    const scale = renderUnitsPerMeterForAltitude(altitudeM);
+    const arcCameraM: Vec3d = [altitudeM * 0.6, altitudeM * 0.64, altitudeM * 0.48];
+    const placement = computeMoonPlacement(MOON_FROM_GROUND, arcCameraM, scale);
+    const expected = Math.hypot(
+      MOON_FROM_GROUND[0] - arcCameraM[0],
+      MOON_FROM_GROUND[1] - arcCameraM[1],
+      MOON_FROM_GROUND[2] - arcCameraM[2],
+    );
+    expect(placement.cameraDistanceM).toBeCloseTo(expected, 4);
+    // The mesh position (camera + ray·distance) lands on the true Moon point.
+    const scaled = placement.renderDistance / scale;
+    expect(arcCameraM[0] + placement.rayLocal[0] * scaled).toBeCloseTo(MOON_FROM_GROUND[0], 2);
+    expect(arcCameraM[1] + placement.rayLocal[1] * scaled).toBeCloseTo(MOON_FROM_GROUND[1], 2);
+    expect(arcCameraM[2] + placement.rayLocal[2] * scaled).toBeCloseTo(MOON_FROM_GROUND[2], 2);
   });
 
   it("hands off proxy to physical continuously (same ray, same angular size)", () => {
@@ -52,24 +78,21 @@ describe("computeMoonPlacement (units: meters and render units, frame: LOCAL_THR
     for (let i = 0; i < 60; i += 1) {
       const mid = (low + high) / 2;
       const placement = computeMoonPlacement(
-        MOON_DIRECTION,
-        MOON_DISTANCE_M,
-        mid,
+        MOON_FROM_GROUND,
+        zenithCameraM(mid),
         renderUnitsPerMeterForAltitude(mid),
       );
       if (placement.physical) high = mid;
       else low = mid;
     }
     const before = computeMoonPlacement(
-      MOON_DIRECTION,
-      MOON_DISTANCE_M,
-      low * 0.999,
+      MOON_FROM_GROUND,
+      zenithCameraM(low * 0.999),
       renderUnitsPerMeterForAltitude(low * 0.999),
     );
     const after = computeMoonPlacement(
-      MOON_DIRECTION,
-      MOON_DISTANCE_M,
-      high * 1.001,
+      MOON_FROM_GROUND,
+      zenithCameraM(high * 1.001),
       renderUnitsPerMeterForAltitude(high * 1.001),
     );
     expect(before.physical).toBe(false);
@@ -86,8 +109,8 @@ describe("computeMoonPlacement (units: meters and render units, frame: LOCAL_THR
   });
 
   it("gains parallax as the camera rises past the Moon's altitude", () => {
-    const ground = computeMoonPlacement(MOON_DIRECTION, MOON_DISTANCE_M, 2, 1e-4);
-    const high = computeMoonPlacement(MOON_DIRECTION, MOON_DISTANCE_M, 300_000_000, 1e-7);
+    const ground = computeMoonPlacement(MOON_FROM_GROUND, zenithCameraM(2), 1e-4);
+    const high = computeMoonPlacement(MOON_FROM_GROUND, zenithCameraM(300_000_000), 1e-7);
     // Rising along the zenith pushes the apparent Moon down toward the horizon.
     expect(high.rayLocal[1]).toBeLessThan(ground.rayLocal[1]);
   });

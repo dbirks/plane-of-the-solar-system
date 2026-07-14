@@ -268,6 +268,21 @@ input:focus-visible {
   box-shadow: 0 0 10px rgb(245 201 119 / 0.25);
 }
 
+/* Captions riding the ecliptic band, rotated to its local screen slope. */
+.plane-caption {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: rgb(127 180 184 / 0.9);
+  font-size: 0.58rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform-origin: 0 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
 .sky-marker:hover .sky-marker-ring,
 .sky-marker:focus-visible .sky-marker-ring {
   border-color: #f5c977;
@@ -300,7 +315,9 @@ input:focus-visible {
   position: absolute;
   top: -35px;
   right: 0;
-  width: 250px;
+  /* No fixed width: anchored right, the box shrink-to-fits and grows leftward
+     so the longest miles readouts never clip off-screen. */
+  max-width: calc(100vw - 24px);
   text-align: right;
   pointer-events: none;
 }
@@ -568,11 +585,10 @@ input:focus-visible {
 
   .scale-readout {
     right: 5px;
-    width: 205px;
   }
 
   .scale-readout strong {
-    font-size: 0.94rem;
+    font-size: clamp(0.78rem, 4vw, 0.94rem);
   }
 
   .slider-assembly {

@@ -8,12 +8,13 @@ import {
   type MoonPlacement,
   rayToAltAzDeg,
 } from "../astronomy/moon-placement";
-import { computeMoonOrbitEqjM } from "../astronomy/moon-orbit";
-import { eclipticNorthEqj } from "../astronomy/planet-orbits";
+import { computeMoonOrbitEqjM, moonGeoEqjM } from "../astronomy/moon-orbit";
+import { eclipticDirectionEqj, eclipticNorthEqj } from "../astronomy/planet-orbits";
 import { type BrightStar, chooseOpeningTarget } from "../astronomy/opening-target";
-import { computeSkyState, type SkyState } from "../astronomy/sky-state";
+import { altAzToLocalThree, computeSkyState, type SkyState } from "../astronomy/sky-state";
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
 import {
+  cameraArcBlendForAltitude,
   earthMoonCompositionForAltitude,
   eclipticRollBlendForAltitude,
   journeyCompositionForSlider,
@@ -46,7 +47,7 @@ import {
 } from "../scene/sky/star-catalog";
 import { SimulationClock } from "../simulation/simulation-clock";
 import { subtractVec3d, type Vec3d } from "../coordinates/vec3d";
-import { type MoonMarkerOverride, SkyOverlay } from "../ui/sky-overlay";
+import { type MoonMarkerOverride, type PlaneGuideAnchor, SkyOverlay } from "../ui/sky-overlay";
 import { createRenderer } from "./renderer-factory";
 
 /** Rotate an EQJ-frame vector into the local Three frame (row-major matrix). */
@@ -251,6 +252,11 @@ export class SpaceRenderer {
   private readonly sunDirectionLocal = new THREE.Vector3(0, 1, 0);
   private readonly sunDirectionUniform = uniform(new THREE.Vector3(0, 1, 0));
   private readonly eclipticNorthLocal = new THREE.Vector3(0, 1, 0);
+  private planeGuideAnchors: PlaneGuideAnchor[] = [];
+  /** Unit direction from Earth's center to the camera, local frame. */
+  private readonly cameraDirLocal = new THREE.Vector3(0, 1, 0);
+  private readonly arcQuaternion = new THREE.Quaternion();
+  private moonGeoLocalM: Vec3d | null = null;
   private earthGuides: THREE.LineSegments | null = null;
   private slowFrameStreak = 0;
   private adaptiveDprCap = Number.POSITIVE_INFINITY;
@@ -360,12 +366,14 @@ export class SpaceRenderer {
 
   /**
    * Camera-relative unit ray toward a geocentric local-frame position. The
-   * camera sits at earth-center + (R + altitude) along the observer zenith.
+   * camera sits at earth-center + (R + altitude) along `cameraDirLocal`
+   * (the observer zenith near the ground, the reveal arc beyond).
    */
   private rayFromGeoLocal(geoLocalM: Vec3d, altitudeM: number): Vec3d {
-    const x = geoLocalM[0];
-    const y = geoLocalM[1] - (altitudeM + EARTH_MEAN_RADIUS_M);
-    const z = geoLocalM[2];
+    const cameraRadiusM = altitudeM + EARTH_MEAN_RADIUS_M;
+    const x = geoLocalM[0] - this.cameraDirLocal.x * cameraRadiusM;
+    const y = geoLocalM[1] - this.cameraDirLocal.y * cameraRadiusM;
+    const z = geoLocalM[2] - this.cameraDirLocal.z * cameraRadiusM;
     const lengthM = Math.hypot(x, y, z) || 1;
     return [x / lengthM, y / lengthM, z / lengthM];
   }
@@ -478,6 +486,8 @@ export class SpaceRenderer {
       sky.sun.directionLocalThree[1] * sky.sun.distanceM + EARTH_MEAN_RADIUS_M,
       sky.sun.directionLocalThree[2] * sky.sun.distanceM,
     ]);
+    // Geometric geocentric Moon from the same EQJ source as its orbit guide.
+    this.moonGeoLocalM = rotateEqjToLocal(sky.eqjToLocalThree, moonGeoEqjM(utcMs) as Vec3d);
 
     // The orbit guide is stable in EQJ; refresh only when hours stale.
     if (Math.abs(utcMs - this.lastOrbitUtcMs) > 6 * 3_600_000) {
@@ -490,6 +500,15 @@ export class SpaceRenderer {
     this.sunAltitudeDeg = sky.sun.altitudeDeg;
     const eclipticNorthLocal = rotateEqjToLocal(sky.eqjToLocalThree, eclipticNorthEqj() as Vec3d);
     this.eclipticNorthLocal.set(...eclipticNorthLocal);
+    // Three "Plane of the solar system" captions spread around the ecliptic;
+    // the overlay projects them each frame and shows whichever face the view.
+    this.planeGuideAnchors = [15, 135, 255].map((longitudeDeg) => ({
+      direction: rotateEqjToLocal(sky.eqjToLocalThree, eclipticDirectionEqj(longitudeDeg) as Vec3d),
+      directionAhead: rotateEqjToLocal(
+        sky.eqjToLocalThree,
+        eclipticDirectionEqj(longitudeDeg + 8) as Vec3d,
+      ),
+    }));
 
     useAppStore.getState().setSkyReadout({
       sunAltitudeDeg: sky.sun.altitudeDeg,
@@ -555,7 +574,36 @@ export class SpaceRenderer {
     const normalizedScale = distanceToSlider(altitudeM);
     const earthRadiusRender = earthRenderRadiusForAltitude(altitudeM);
     const renderUnitsPerMeter = renderUnitsPerMeterForAltitude(altitudeM);
-    const earthCenterY = -(EARTH_MEAN_RADIUS_M + altitudeM) * renderUnitsPerMeter;
+
+    // The reveal arc: past the atmosphere the camera leaves the zenith ray
+    // and swings around the planet to an anti-sunward vantage raised above
+    // the ecliptic — Earth stands alone in frame with the observer's dot on
+    // its side and the Sun and inner system in the background, day or night.
+    const arcBlend = cameraArcBlendForAltitude(altitudeM);
+    this.cameraDirLocal.set(0, 1, 0);
+    this.arcQuaternion.identity();
+    if (arcBlend > 0.001) {
+      const revealDir = new THREE.Vector3()
+        .copy(this.sunDirectionLocal)
+        .multiplyScalar(-1)
+        .addScaledVector(this.eclipticNorthLocal, 0.45)
+        .normalize();
+      const fullArc = new THREE.Quaternion().setFromUnitVectors(this.cameraDirLocal, revealDir);
+      this.arcQuaternion.slerp(fullArc, arcBlend);
+      this.cameraDirLocal.applyQuaternion(this.arcQuaternion);
+    }
+    // Earth's center in camera-relative render space; the camera itself
+    // always sits at the origin.
+    const earthCenterRender = new THREE.Vector3()
+      .copy(this.cameraDirLocal)
+      .multiplyScalar(-(EARTH_MEAN_RADIUS_M + altitudeM) * renderUnitsPerMeter);
+    // The ground observer's surface point — no longer straight below once
+    // the arc is underway.
+    const observerSurfaceRender = new THREE.Vector3(
+      0,
+      EARTH_MEAN_RADIUS_M * renderUnitsPerMeter,
+      0,
+    ).add(earthCenterRender);
 
     const globalObjects: THREE.Object3D[] = [
       this.objects.earth,
@@ -565,7 +613,7 @@ export class SpaceRenderer {
     ];
     if (this.earthGuides) globalObjects.push(this.earthGuides);
     for (const object of globalObjects) {
-      object.position.set(0, earthCenterY, 0);
+      object.position.copy(earthCenterRender);
       object.scale.setScalar(earthRadiusRender);
     }
     // Earth scale collapses to sub-pixel at system scale; drop the guides too.
@@ -582,7 +630,7 @@ export class SpaceRenderer {
 
     const localFade = 1 - smoothstep(8_000, 90_000, altitudeM);
     const capRadiusM = Math.max(220_000, Math.sqrt(2 * EARTH_MEAN_RADIUS_M * altitudeM) * 1.5);
-    this.objects.localCap.position.set(0, -altitudeM * renderUnitsPerMeter, 0);
+    this.objects.localCap.position.copy(observerSurfaceRender);
     this.objects.localCap.scale.setScalar(capRadiusM * renderUnitsPerMeter);
     this.objects.localCap.visible = localFade > 0.001;
     (this.objects.localCap.material as THREE.MeshStandardMaterial).opacity = localFade;
@@ -590,9 +638,9 @@ export class SpaceRenderer {
     // The observer's dot appears as soon as the gaze starts sweeping down —
     // "that is where I am standing" anchors the rest of the pull-out.
     const markerReveal = smoothstep(1_500, 30_000, altitudeM);
-    const markerDistanceRender = altitudeM * renderUnitsPerMeter;
+    const markerDistanceRender = observerSurfaceRender.length();
     const markerSize = Math.max(0.002, markerDistanceRender * 0.006);
-    this.objects.observerMarker.position.set(0, -altitudeM * renderUnitsPerMeter, 0);
+    this.objects.observerMarker.position.copy(observerSurfaceRender);
     this.objects.observerMarker.scale.setScalar(markerSize);
     this.objects.observerMarker.visible = markerReveal > 0.001;
     const markerMaterial = this.objects.observerMarker.material as THREE.MeshBasicMaterial;
@@ -621,7 +669,7 @@ export class SpaceRenderer {
     if (systemReveal > 0 && this.solarLayer) {
       this.solarLayer.buildOrbits(simulationUtcMs);
     }
-    this.solarLayer?.updateFrame(earthCenterY, renderUnitsPerMeter, systemReveal, {
+    this.solarLayer?.updateFrame(earthCenterRender, renderUnitsPerMeter, systemReveal, {
       orbitLines: layers["orbit-lines"],
       eclipticRings: layers["ecliptic-rings"],
     });
@@ -633,26 +681,51 @@ export class SpaceRenderer {
     // Sunlight arrives from the true Sun direction; rays run parallel from
     // position toward the earth-center target, so the terminator is physical.
     const sunOffsetRender = earthRadiusRender * 4;
-    this.objects.keyLight.position.set(
-      this.sunDirectionLocal.x * sunOffsetRender,
-      earthCenterY + this.sunDirectionLocal.y * sunOffsetRender,
-      this.sunDirectionLocal.z * sunOffsetRender,
-    );
-    this.objects.keyLight.target.position.set(0, earthCenterY, 0);
+    this.objects.keyLight.position
+      .copy(earthCenterRender)
+      .addScaledVector(this.sunDirectionLocal, sunOffsetRender);
+    this.objects.keyLight.target.position.copy(earthCenterRender);
     this.objects.fillLight.intensity = 0.22 + 0.63 * daylight;
 
     // Physical Moon: same ray as the sky proxy, true scaled distance once it
     // fits inside the far plane — the hand-off is continuous by construction.
+    // The camera's true arc position feeds the parallax, and the placement
+    // blends from the refracted ground ray onto the geometric EQJ chain so
+    // the Moon sits exactly on its geocentric orbit line at system scales.
     if (this.skyState) {
+      const cameraFromGroundM: Vec3d = [
+        this.cameraDirLocal.x * (EARTH_MEAN_RADIUS_M + altitudeM),
+        this.cameraDirLocal.y * (EARTH_MEAN_RADIUS_M + altitudeM) - EARTH_MEAN_RADIUS_M,
+        this.cameraDirLocal.z * (EARTH_MEAN_RADIUS_M + altitudeM),
+      ];
+      const refracted = this.skyState.moon.directionLocalThree;
+      const refractedFromGroundM: Vec3d = [
+        refracted[0] * this.skyState.moon.distanceM,
+        refracted[1] * this.skyState.moon.distanceM,
+        refracted[2] * this.skyState.moon.distanceM,
+      ];
+      let moonFromGroundM = refractedFromGroundM;
+      if (this.moonGeoLocalM) {
+        const geometricFromGroundM: Vec3d = [
+          this.moonGeoLocalM[0],
+          this.moonGeoLocalM[1] - EARTH_MEAN_RADIUS_M,
+          this.moonGeoLocalM[2],
+        ];
+        const geometricBlend = smoothstep(1_000_000, 10_000_000, altitudeM);
+        moonFromGroundM = [
+          THREE.MathUtils.lerp(refractedFromGroundM[0], geometricFromGroundM[0], geometricBlend),
+          THREE.MathUtils.lerp(refractedFromGroundM[1], geometricFromGroundM[1], geometricBlend),
+          THREE.MathUtils.lerp(refractedFromGroundM[2], geometricFromGroundM[2], geometricBlend),
+        ];
+      }
       this.moonPlacement = computeMoonPlacement(
-        this.skyState.moon.directionLocalThree,
-        this.skyState.moon.distanceM,
-        altitudeM,
+        moonFromGroundM,
+        cameraFromGroundM,
         renderUnitsPerMeter,
       );
       this.skyLayer?.updateMoonPlacement(this.moonPlacement);
     }
-    this.skyLayer?.updateEarthAnchored(earthCenterY, renderUnitsPerMeter, altitudeM, {
+    this.skyLayer?.updateEarthAnchored(earthCenterRender, renderUnitsPerMeter, altitudeM, {
       moonOrbit: layers["moon-orbit"],
       sunGuide: layers["sun-guide"],
     });
@@ -673,6 +746,7 @@ export class SpaceRenderer {
       const framing = earthMoonCompositionForAltitude(
         altitudeM,
         this.moonPlacement.rayLocal,
+        [-this.cameraDirLocal.x, -this.cameraDirLocal.y, -this.cameraDirLocal.z],
         baseFovDeg,
       );
       if (framing.blend > 0) {
@@ -704,30 +778,12 @@ export class SpaceRenderer {
       }
     }
 
-    // Marker-click look-at: ease the free-look offsets toward the body.
-    if (this.lookTarget && this.pointerId === null) {
-      const targetYaw = wrapAngleRad(
-        -THREE.MathUtils.degToRad(this.lookTarget.azimuthDeg) - baseYawRad,
-      );
-      const targetPitch = THREE.MathUtils.clamp(
-        THREE.MathUtils.degToRad(Math.min(60, Math.max(4, this.lookTarget.altitudeDeg))) -
-          basePitchRad,
-        -0.65,
-        1.52,
-      );
-      const ease = 1 - Math.exp(-5 * deltaSeconds);
-      const yawDelta = wrapAngleRad(targetYaw - this.yawOffset);
-      const pitchDelta = targetPitch - this.pitchOffset;
-      this.yawOffset += yawDelta * ease;
-      this.pitchOffset += pitchDelta * ease;
-      if (Math.abs(yawDelta) < 0.004 && Math.abs(pitchDelta) < 0.004) {
-        this.lookTarget = null;
-      }
-    }
-
     const baseQuaternion = new THREE.Quaternion()
       .setFromAxisAngle(new THREE.Vector3(0, 1, 0), baseYawRad)
-      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), basePitchRad));
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), basePitchRad))
+      // The reveal arc carries the whole base frame around the planet, so the
+      // gaze stays pinned on Earth's center for free.
+      .premultiply(this.arcQuaternion);
 
     // The reveal: screen-up rolls from the observer's zenith to ecliptic
     // north on the way out, so the solar system's plane settles flat while
@@ -748,6 +804,31 @@ export class SpaceRenderer {
         baseQuaternion.premultiply(
           new THREE.Quaternion().setFromAxisAngle(gaze, rollAngle * rollBlend),
         );
+      }
+    }
+
+    // Marker-click look-at: ease the free-look offsets toward the body. The
+    // target ray is transformed into the (arced, rolled) base frame, so the
+    // math holds at every scale, not just the ground's yaw/pitch frame.
+    if (this.lookTarget && this.pointerId === null) {
+      const clampedAltitudeDeg = Math.min(60, Math.max(4, this.lookTarget.altitudeDeg));
+      const rayLocal = altAzToLocalThree(clampedAltitudeDeg, this.lookTarget.azimuthDeg);
+      const rayBase = new THREE.Vector3(...rayLocal).applyQuaternion(
+        baseQuaternion.clone().invert(),
+      );
+      const targetYaw = Math.atan2(-rayBase.x, -rayBase.z);
+      const targetPitch = THREE.MathUtils.clamp(
+        Math.asin(THREE.MathUtils.clamp(rayBase.y, -1, 1)),
+        -0.65,
+        1.52,
+      );
+      const ease = 1 - Math.exp(-5 * deltaSeconds);
+      const yawDelta = wrapAngleRad(targetYaw - this.yawOffset);
+      const pitchDelta = targetPitch - this.pitchOffset;
+      this.yawOffset += yawDelta * ease;
+      this.pitchOffset += pitchDelta * ease;
+      if (Math.abs(yawDelta) < 0.004 && Math.abs(pitchDelta) < 0.004) {
+        this.lookTarget = null;
       }
     }
 
@@ -793,10 +874,21 @@ export class SpaceRenderer {
         });
       }
     }
-    this.overlay?.update(this.camera, headingDeg, altitudeM, overrides, systemReveal, {
-      labels: layers["marker-labels"],
-      belowHorizon: layers["below-horizon-markers"],
-    });
+    this.overlay?.update(
+      this.camera,
+      headingDeg,
+      altitudeM,
+      overrides,
+      systemReveal,
+      {
+        labels: layers["marker-labels"],
+        belowHorizon: layers["below-horizon-markers"],
+      },
+      {
+        anchors: this.planeGuideAnchors,
+        opacity: layers["ecliptic-rings"] ? 0.55 * (1 - systemReveal) : 0,
+      },
+    );
     this.framesSinceTelemetry += 1;
     this.collectTelemetry(
       timeMs,

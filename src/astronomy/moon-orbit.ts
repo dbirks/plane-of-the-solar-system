@@ -25,3 +25,16 @@ export function computeMoonOrbitEqjM(
   }
   return points;
 }
+
+/**
+ * The Moon's current geocentric EQJ position in meters — the same source the
+ * orbit guide samples, so a mesh placed with it sits exactly on the line.
+ */
+export function moonGeoEqjM(utcMs: number): readonly [number, number, number] {
+  const geoMoonEqjAu = GeoMoon(MakeTime(new Date(utcMs)));
+  return [
+    geoMoonEqjAu.x * METERS_PER_AU,
+    geoMoonEqjAu.y * METERS_PER_AU,
+    geoMoonEqjAu.z * METERS_PER_AU,
+  ];
+}

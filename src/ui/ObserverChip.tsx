@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { useAppStore } from "../app/app-store";
 import { type CompassStop, compassSupported, startCompass } from "../location/compass-mode";
+import { nearestPlace } from "../location/nearest-place";
 import {
   clearSavedObserver,
   type ObserverLocation,
@@ -63,6 +64,14 @@ export function ObserverChip({
         ? "Facing south · "
         : `Facing the ${facingLabel} · `;
 
+  // A coarse, familiar anchor ("Near Indianapolis, IN") instead of raw
+  // coordinates — friendlier and narrower on small screens. The exact
+  // numbers stay available in the expanded panel.
+  const placeText = useMemo(() => {
+    const place = nearestPlace(observer.latitudeDeg, observer.longitudeDeg);
+    return place ? `Near ${place.label}` : observer.label;
+  }, [observer.latitudeDeg, observer.longitudeDeg, observer.label]);
+
   const applyManual = () => {
     const latitudeDeg = Number(latitudeInput);
     const longitudeDeg = Number(longitudeInput);
@@ -119,7 +128,7 @@ export function ObserverChip({
       >
         <span className="pulse-dot" />
         {facingText}
-        {observer.label}
+        {placeText}
       </button>
 
       {open && (

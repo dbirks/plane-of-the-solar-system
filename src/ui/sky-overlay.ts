@@ -43,12 +43,21 @@ function smoothstepNumber(edge0: number, edge1: number, value: number): number {
   return t * t * (3 - 2 * t);
 }
 
+export type PlaneGuideAnchor = {
+  /** Unit direction of a point on the ecliptic, local frame. */
+  direction: readonly [number, number, number];
+  /** A nearby point further along the band, for the caption's screen slope. */
+  directionAhead: readonly [number, number, number];
+};
+
 export class SkyOverlay {
   private readonly root: HTMLElement;
   private readonly layer: HTMLDivElement;
   private readonly markers = new Map<string, MarkerEntry>();
   private readonly handlers: SkyOverlayHandlers;
   private readonly workVector = new THREE.Vector3();
+  private readonly workVectorAhead = new THREE.Vector3();
+  private planeCaptions: HTMLSpanElement[] = [];
 
   constructor(root: HTMLElement, handlers: SkyOverlayHandlers) {
     this.root = root;
@@ -116,6 +125,7 @@ export class SkyOverlay {
     overrides?: Map<string, MoonMarkerOverride>,
     systemReveal = 0,
     prefs: { labels: boolean; belowHorizon: boolean } = { labels: true, belowHorizon: true },
+    planeGuides?: { anchors: readonly PlaneGuideAnchor[]; opacity: number },
   ): void {
     const proxyOpacity =
       1 - smoothstepNumber(PROXY_FADE_START_ALTITUDE_M, PROXY_FADE_END_ALTITUDE_M, altitudeM);
@@ -201,6 +211,8 @@ export class SkyOverlay {
       }
     }
 
+    this.updatePlaneCaptions(camera, width, height, planeGuides);
+
     const strip = document.getElementById("compass-strip");
     const window = strip?.parentElement;
     if (strip && window) {
@@ -238,6 +250,61 @@ export class SkyOverlay {
   private activate(entry: MarkerEntry): void {
     this.handlers.onLook(entry.lookAzimuthDeg, entry.lookAltitudeDeg);
     this.handlers.onSelect(entry.body.id);
+  }
+
+  /**
+   * "Plane of the solar system" captions riding the ecliptic band: each
+   * anchor is projected like a marker and the caption rotates to the band's
+   * local screen slope. Anchors behind the camera or off-frame simply hide.
+   */
+  private updatePlaneCaptions(
+    camera: THREE.PerspectiveCamera,
+    width: number,
+    height: number,
+    planeGuides?: { anchors: readonly PlaneGuideAnchor[]; opacity: number },
+  ): void {
+    const anchors = planeGuides?.anchors ?? [];
+    while (this.planeCaptions.length < anchors.length) {
+      const caption = document.createElement("span");
+      caption.className = "plane-caption";
+      caption.textContent = "Plane of the solar system";
+      caption.setAttribute("aria-hidden", "true");
+      this.layer.appendChild(caption);
+      this.planeCaptions.push(caption);
+    }
+    for (let i = 0; i < this.planeCaptions.length; i += 1) {
+      const caption = this.planeCaptions[i]!;
+      const anchor = anchors[i];
+      const opacity = planeGuides?.opacity ?? 0;
+      if (!anchor || opacity <= 0.02 || width <= 0 || height <= 0) {
+        caption.style.display = "none";
+        continue;
+      }
+      this.workVector.set(...anchor.direction).applyMatrix4(camera.matrixWorldInverse);
+      this.workVectorAhead.set(...anchor.directionAhead).applyMatrix4(camera.matrixWorldInverse);
+      if (this.workVector.z >= 0 || this.workVectorAhead.z >= 0) {
+        caption.style.display = "none";
+        continue;
+      }
+      this.workVector.applyMatrix4(camera.projectionMatrix);
+      this.workVectorAhead.applyMatrix4(camera.projectionMatrix);
+      if (Math.abs(this.workVector.x) > 0.92 || Math.abs(this.workVector.y) > 0.86) {
+        caption.style.display = "none";
+        continue;
+      }
+      const screenX = ((this.workVector.x + 1) / 2) * width;
+      const screenY = ((1 - this.workVector.y) / 2) * height;
+      const aheadX = ((this.workVectorAhead.x + 1) / 2) * width;
+      const aheadY = ((1 - this.workVectorAhead.y) / 2) * height;
+      const slopeDeg = (Math.atan2(aheadY - screenY, aheadX - screenX) * 180) / Math.PI;
+      // Keep the text upright: flip when the band runs right-to-left.
+      const uprightDeg = slopeDeg > 90 ? slopeDeg - 180 : slopeDeg < -90 ? slopeDeg + 180 : slopeDeg;
+      caption.style.display = "";
+      caption.style.opacity = opacity.toFixed(3);
+      caption.style.transform =
+        `translate(${screenX.toFixed(1)}px, ${screenY.toFixed(1)}px) ` +
+        `rotate(${uprightDeg.toFixed(2)}deg) translate(-50%, -170%)`;
+    }
   }
 
   dispose(): void {
