@@ -129,6 +129,22 @@ input:focus-visible {
   display: block;
 }
 
+/* Circular header icon buttons (settings, compass). */
+.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+}
+
+.icon-button--active {
+  border-color: rgb(91 155 255 / 0.65);
+  color: #8fbcff;
+  box-shadow: 0 0 12px rgb(91 155 255 / 0.25);
+}
+
 .backend-pill {
   padding: 8px 12px;
   color: #a9c8ca;
@@ -328,6 +344,19 @@ input:focus-visible {
   color: rgb(226 240 240 / 0.38);
 }
 
+/* In the sky view, on-screen bodies wear a big soft muted circle. */
+.sky-marker--sky .sky-marker-pointer {
+  top: -3px;
+  left: -3px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgb(214 228 236 / 0.4);
+  border-radius: 999px;
+  background: none;
+  box-shadow: inset 0 0 10px rgb(214 228 236 / 0.08);
+  filter: none;
+}
+
 /* Below the horizon the pointer relaxes back to a small hollow circle. */
 .sky-marker--ghost .sky-marker-pointer {
   top: 7px;
@@ -337,6 +366,8 @@ input:focus-visible {
   border: 1px solid rgb(148 175 180 / 0.5);
   border-radius: 999px;
   filter: none;
+  background: none;
+  box-shadow: none;
 }
 
 .scale-control {
@@ -551,20 +582,41 @@ input:focus-visible {
   font-weight: 600;
 }
 
-/* The settings dialog: the intro's shell, grown up, with an explicit close. */
+/* The settings dialog: the intro's shell, grown up. The title row is pinned
+   (the X never scrolls away) and only the body scrolls — no empty space can
+   be revealed above the heading. */
 .settings-dialog {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100dvh - 72px);
+  overflow: hidden;
+}
+
+.settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 12px;
+  padding-bottom: 6px;
+}
+
+.settings-header h2 {
+  margin-bottom: 0;
+}
+
+.settings-body {
+  min-height: 0;
+  padding-top: 8px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .settings-close {
-  position: absolute;
-  top: 14px;
-  right: 16px;
-  width: 34px;
-  height: 34px;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 1px solid rgb(180 225 228 / 0.22);
   border-radius: 999px;
@@ -599,30 +651,143 @@ input:focus-visible {
 }
 
 .settings-guides {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  display: flex;
+  flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
-  gap: 7px 16px;
+  gap: 4px;
   color: #dbe8e8;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
 }
 
-.settings-guides label {
+/* One guide per row: name + description on the left, a switch on the right. */
+.guide-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 9px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 2px;
   cursor: pointer;
 }
 
-.settings-guides input {
-  accent-color: #5b9bff;
+.guide-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.guide-text strong {
+  color: #e8f2f2;
+  font-weight: 600;
+}
+
+.guide-text small {
+  color: #93aaad;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+/* Switch: the real checkbox stays for accessibility and tests — an
+   invisible layer covering the whole row, so clicks and automation land on
+   the actual input; the track/knob pair below is purely visual. */
+.switch-input {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+  border: 1px solid rgb(180 225 228 / 0.28);
+  border-radius: 999px;
+  background: rgb(10 24 32 / 0.9);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #8aa3a6;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.switch-input:checked + .switch-track {
+  border-color: rgb(91 155 255 / 0.7);
+  background: rgb(43 82 148 / 0.65);
+}
+
+.switch-input:checked + .switch-track .switch-knob {
+  transform: translateX(18px);
+  background: #9cc4ff;
+}
+
+.switch-input:focus-visible + .switch-track {
+  outline: 2px solid rgb(156 196 255 / 0.9);
+  outline-offset: 2px;
+}
+
+.credits-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: #8aa3a6;
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.credits-list a {
+  color: #9cc4ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.intro-permission-note {
+  color: #a9c2c4;
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.intro-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.intro-continue {
+  padding: 11px 22px;
+  border: 1px solid rgb(180 225 228 / 0.28);
+  border-radius: 10px;
+  background: none;
+  color: #c9dcdd;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.intro-continue:hover,
+.intro-continue:focus-visible {
+  border-color: rgb(180 225 228 / 0.55);
+  color: #eef7f7;
 }
 
 .intro-begin {
   display: block;
-  margin-left: auto;
   padding: 11px 34px;
   border: 1px solid rgb(245 201 119 / 0.55);
   border-radius: 10px;
@@ -825,10 +990,19 @@ input:focus-visible {
   opacity: 0.75;
 }
 
-/* Near the bottom of the frame the label flips above the dot. */
+/* Label above the pointer (default for space arrows; edge-flip for the
+   rest). The sky circle is taller, so its above-label sits higher. */
 .sky-marker--label-above .sky-marker-label {
   top: auto;
   bottom: 23px;
+}
+
+.sky-marker--sky.sky-marker--label-above .sky-marker-label {
+  bottom: 27px;
+}
+
+.sky-marker--sky .sky-marker-label {
+  top: 27px;
 }
 
 .observer-label--button {
@@ -1010,9 +1184,3 @@ input:focus-visible {
   display: none;
 }
 
-.layers-credits {
-  margin: 16px 0 0;
-  color: #8aa3a6;
-  font-size: 0.66rem;
-  line-height: 1.55;
-}

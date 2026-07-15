@@ -5,10 +5,10 @@ const fixedScenario =
 
 const landmarks = [
   { name: "ground", sliderValue: "0", settleMs: 500 },
-  { name: "atmosphere", sliderValue: "0.2", settleMs: 2_500 },
-  { name: "low-orbit", sliderValue: "0.26", settleMs: 2_500 },
-  { name: "whole-earth", sliderValue: "0.36", settleMs: 3_500 },
-  { name: "earth-moon", sliderValue: "0.52", settleMs: 4_000 },
+  { name: "atmosphere", sliderValue: "0.12", settleMs: 2_500 },
+  { name: "low-orbit", sliderValue: "0.18", settleMs: 2_500 },
+  { name: "whole-earth", sliderValue: "0.3", settleMs: 3_500 },
+  { name: "earth-moon", sliderValue: "0.48", settleMs: 4_000 },
   { name: "full-system", sliderValue: "1", settleMs: 5_000 },
 ] as const;
 

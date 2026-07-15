@@ -66,6 +66,10 @@ export type BodyReadout = {
   distanceFromObserverM: number;
   /** 0 for the Sun itself. */
   distanceFromSunM: number;
+  /** Sunlit share of the disc as seen from Earth (1 for the Sun). */
+  illuminatedFraction: number;
+  /** Which limb the Sun lights in the inset disc (toward the Sun's side of the sky). */
+  litOnRight: boolean;
 };
 
 type AppState = {

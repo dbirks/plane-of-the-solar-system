@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { type FeatureFlags, readFeatureFlags } from "./feature-flags";
 import { setActiveDistanceUnit, setGroundElevationM } from "../camera/distance-format";
 import { nearestLandmark } from "../camera/scale-domains";
+import { compassSupported } from "../location/compass-mode";
 import { nearestPlace } from "../location/nearest-place";
 import { resolveObserverLocation } from "../location/observer-location";
+import { togglePhoneLook } from "../location/phone-look";
 import { SpaceRenderer } from "../renderer/space-renderer";
 import { BodyInset } from "../ui/BodyInset";
 import { CompassRibbon } from "../ui/CompassRibbon";
@@ -15,6 +17,7 @@ import { ObserverChip } from "../ui/ObserverChip";
 import { ScaleSlider } from "../ui/ScaleSlider";
 import { SettingsDialog } from "../ui/SettingsDialog";
 import { useAppStore } from "./app-store";
+import { installWakeLock } from "./wake-lock";
 
 const observer = resolveObserverLocation(window.location.search, window.localStorage);
 const flags: FeatureFlags = {
@@ -24,6 +27,7 @@ const flags: FeatureFlags = {
 };
 setActiveDistanceUnit(flags.distanceUnit);
 setGroundElevationM(nearestPlace(observer.latitudeDeg, observer.longitudeDeg)?.elevationM ?? 0);
+installWakeLock();
 
 // The intro greets plain first visits; reproducible capture URLs (?time/?lat)
 // and returning visitors go straight to the sky.
@@ -44,6 +48,7 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   const telemetry = useAppStore((state) => state.telemetry);
   const openingTargetLabel = useAppStore((state) => state.openingTargetLabel);
+  const phoneLookActive = useAppStore((state) => state.phoneLookActive);
   const currentLandmarkLabel = nearestLandmark(telemetry.currentDistanceM).label;
 
   useEffect(() => {
@@ -72,9 +77,34 @@ export function App() {
         </div>
         <div className="header-actions">
           <span className="backend-pill">{telemetry.backend}</span>
+          {compassSupported() && (
+            <button
+              type="button"
+              className={`quiet-button icon-button${phoneLookActive ? " icon-button--active" : ""}`}
+              aria-label={phoneLookActive ? "Compass mode on" : "Compass mode"}
+              aria-pressed={phoneLookActive}
+              onClick={() => void togglePhoneLook()}
+            >
+              {/* Lucide "compass", inlined (no runtime deps). */}
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
-            className="quiet-button"
+            className="quiet-button icon-button"
             aria-label="Settings"
             onClick={() => setShowSettings(true)}
           >

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { stepCriticalSpring } from "../camera/camera-spring";
 import {
-  EARTH_SCREEN_OFFSET_RAD,
   earthMoonCompositionForAltitude,
   journeyCompositionForSlider,
+  OBSERVER_SWING_RAD,
   REVEAL_NORTH_LIFT,
   revealBlendForAltitude,
   systemCompositionForAltitude,
@@ -32,13 +32,12 @@ describe("logarithmic journey scale", () => {
   });
 
   it("uses perceptual logarithmic anchors for a responsive ascent", () => {
-    expect(distanceToSlider(1_000)).toBeCloseTo(0.1, 12);
-    expect(distanceToSlider(100_000)).toBeCloseTo(0.2, 12);
-    expect(distanceToSlider(500_000)).toBeCloseTo(0.26, 12);
-    // The quiet atmosphere → whole-Earth leg is compressed; the journey
-    // beyond, where the system assembles, owns most of the slider.
-    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.36, 12);
-    expect(distanceToSlider(500_000_000)).toBeCloseTo(0.52, 12);
+    // The whole quiet ground → whole-Earth leg fits the first ~third; the
+    // journey beyond, where the system assembles, owns most of the slider.
+    expect(distanceToSlider(100_000)).toBeCloseTo(0.12, 12);
+    expect(distanceToSlider(500_000)).toBeCloseTo(0.18, 12);
+    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.3, 12);
+    expect(distanceToSlider(500_000_000)).toBeCloseTo(0.48, 12);
     expect(JOURNEY_LANDMARKS.at(-1)).toMatchObject({
       id: "full-system",
       distanceM: 12_000_000_000_000,
@@ -53,7 +52,7 @@ describe("logarithmic journey scale", () => {
     expect(Math.abs(applySoftLandmarkAttraction(near) - atmosphereT)).toBeLessThan(
       Math.abs(near - atmosphereT),
     );
-    // Midway between the atmosphere (0.2) and low-orbit (0.26) anchors,
+    // Midway between the atmosphere (0.12) and low-orbit (0.18) anchors,
     // outside both attraction radii.
     expect(applySoftLandmarkAttraction(atmosphereT + 0.03)).toBeCloseTo(atmosphereT + 0.03, 12);
   });
@@ -84,10 +83,10 @@ describe("whole-Earth composition", () => {
 
   it("settles the FOV by the atmosphere landmark", () => {
     expect(journeyCompositionForSlider(0)).toBe(0);
-    expect(journeyCompositionForSlider(0.13)).toBeCloseTo(0.55, 12);
-    expect(journeyCompositionForSlider(0.2)).toBe(1);
-    expect(journeyCompositionForSlider(0.26)).toBe(1);
-    expect(journeyCompositionForSlider(0.36)).toBe(1);
+    expect(journeyCompositionForSlider(0.08)).toBeCloseTo(0.55, 12);
+    expect(journeyCompositionForSlider(0.12)).toBe(1);
+    expect(journeyCompositionForSlider(0.18)).toBe(1);
+    expect(journeyCompositionForSlider(0.3)).toBe(1);
     expect(journeyCompositionForSlider(1)).toBe(1);
   });
 
@@ -114,12 +113,12 @@ describe("whole-Earth composition", () => {
     }
   });
 
-  it("keeps Earth right of center at a modest offset, near the plane", () => {
-    // ~18° of yaw keeps the planet clearly off-center without losing it at
-    // the whole-Earth FOV; ~8.5° of ecliptic latitude keeps the plane a
-    // near-flat line rather than a disc seen from above.
-    expect(EARTH_SCREEN_OFFSET_RAD).toBeGreaterThan(0.2);
-    expect(EARTH_SCREEN_OFFSET_RAD).toBeLessThan(0.5);
+  it("swings the vantage well around the observer, near the plane", () => {
+    // ~70° around from the observer's zenith keeps the dot on the visible
+    // side of the tilted globe (not the limb); ~8.5° of ecliptic latitude
+    // keeps the plane a near-flat line rather than a disc seen from above.
+    expect(OBSERVER_SWING_RAD).toBeGreaterThan(1.0);
+    expect(OBSERVER_SWING_RAD).toBeLessThan(1.5);
     const elevationDeg = (Math.asin(REVEAL_NORTH_LIFT / Math.hypot(1, REVEAL_NORTH_LIFT)) * 180) / Math.PI;
     expect(elevationDeg).toBeGreaterThan(4);
     expect(elevationDeg).toBeLessThan(15);

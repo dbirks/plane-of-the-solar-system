@@ -24,7 +24,9 @@ const PLANET_BODIES: Record<PlanetId, Body> = {
 
 export const PLANET_IDS = Object.keys(PLANET_BODIES) as readonly PlanetId[];
 
-export const ORBIT_SAMPLE_COUNT = 192;
+// High enough that an orbit stays a smooth curve even with the camera
+// riding right next to it (192 showed visible chords at the inner system).
+export const ORBIT_SAMPLE_COUNT = 512;
 
 /**
  * One full orbit of heliocentric J2000-equatorial (EQJ) positions in meters,
@@ -72,7 +74,7 @@ export function computeEarthOrbitEqjM(utcMs: number, sampleCount = ORBIT_SAMPLE_
  * in EQJ meters — the guide geometry that makes the plane of the solar system
  * visible.
  */
-export function computeEclipticRingEqjM(radiusAu: number, sampleCount = 128): Float32Array {
+export function computeEclipticRingEqjM(radiusAu: number, sampleCount = 360): Float32Array {
   const { rot } = Rotation_ECL_EQJ();
   const points = new Float32Array(sampleCount * 3);
   const radiusM = radiusAu * METERS_PER_AU;

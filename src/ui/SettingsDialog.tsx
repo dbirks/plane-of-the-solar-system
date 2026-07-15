@@ -4,20 +4,21 @@ import { type LayerId, useAppStore } from "../app/app-store";
 import { compassSupported } from "../location/compass-mode";
 import { togglePhoneLook } from "../location/phone-look";
 
-const GUIDE_LABELS: ReadonlyArray<[LayerId, string]> = [
-  ["orbit-lines", "Planet orbits"],
-  ["ecliptic-rings", "Ecliptic plane"],
-  ["moon-orbit", "Moon orbit"],
-  ["sun-guide", "Sunlight direction"],
-  ["earth-axis", "Earth axis & equator"],
-  ["sky-grid", "Sky grid"],
-  ["marker-labels", "Marker labels"],
-  ["below-horizon-markers", "Below-horizon markers"],
+const GUIDES: ReadonlyArray<[LayerId, string, string]> = [
+  ["orbit-lines", "Planet orbits", "Each planet's path around the Sun."],
+  ["ecliptic-rings", "Ecliptic plane", "The flat plane the planets ride, at every scale."],
+  ["moon-orbit", "Moon orbit", "The Moon's real path around Earth."],
+  ["sun-guide", "Sunlight direction", "A line from Earth toward the Sun."],
+  ["earth-axis", "Earth axis & equator", "The spin axis and equator drawn on the globe."],
+  ["sky-grid", "Sky grid", "Altitude and azimuth lines over the sky."],
+  ["marker-labels", "Marker labels", "Names beside the body markers."],
+  ["below-horizon-markers", "Below-horizon markers", "Keep markers for bodies under the horizon."],
 ];
 
 /**
  * The header's one dialog: how to move, pointing with your phone, and the
- * optional guide geometry (SPEC §12 layers) with data credits.
+ * optional guide geometry (SPEC §12 layers) with data credits. The title row
+ * stays pinned while the body scrolls.
  */
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const layers = useAppStore((state) => state.layers);
@@ -42,66 +43,137 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         aria-modal="true"
         aria-label="Settings"
       >
-        <button
-          type="button"
-          className="settings-close"
-          onClick={onClose}
-          aria-label="Close settings"
-        >
-          ×
-        </button>
-        <span className="eyebrow">Plane of the solar system</span>
-        <h2>Settings</h2>
+        <header className="settings-header">
+          <div>
+            <span className="eyebrow">Plane of the solar system</span>
+            <h2>Settings</h2>
+          </div>
+          <button
+            type="button"
+            className="settings-close"
+            onClick={onClose}
+            aria-label="Close settings"
+          >
+            ×
+          </button>
+        </header>
 
-        <section>
-          <h3>How to move</h3>
-          <ul className="intro-list">
-            <li>
-              <strong>Drag</strong> to look around the sky.
-            </li>
-            <li>
-              <strong>Scroll</strong> (or use the rail on the right) to leave the ground.
-            </li>
-            <li>
-              <strong>Tap a marker</strong> to turn toward that body and read about it.
-            </li>
-          </ul>
-        </section>
-
-        {compassSupported() && (
+        <div className="settings-body">
           <section>
-            <h3>Point with your phone</h3>
-            <p className="settings-hint">Aim your phone at the sky and the view follows.</p>
-            <button type="button" className="quiet-button" onClick={() => void onPhoneLook()}>
-              {phoneLookActive ? "Compass mode on" : "Compass mode"}
-            </button>
-            {phoneLookStatus && <p className="location-hint">{phoneLookStatus}</p>}
-          </section>
-        )}
-
-        <section>
-          <h3>Guides</h3>
-          <ul className="settings-guides">
-            {GUIDE_LABELS.map(([layerId, label]) => (
-              <li key={layerId}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={layers[layerId]}
-                    onChange={(event) => setLayer(layerId, event.currentTarget.checked)}
-                  />
-                  {label}
-                </label>
+            <h3>How to move</h3>
+            <ul className="intro-list">
+              <li>
+                <strong>Drag</strong> to look around the sky.
               </li>
-            ))}
-          </ul>
-        </section>
+              <li>
+                <strong>Scroll</strong> (or use the rail on the right) to leave the ground.
+              </li>
+              <li>
+                <strong>Tap a marker</strong> to turn toward that body and read about it.
+              </li>
+            </ul>
+          </section>
 
-        <p className="layers-credits">
-          Sky data: astronomy-engine (MIT) and the HYG star database (CC BY-SA 4.0). Earth imagery:
-          NASA Blue Marble and Black Marble (NASA Earth Observatory). Moon imagery: NASA CGI Moon
-          Kit (LRO). Place names: GeoNames (CC BY 4.0), matched on-device.
-        </p>
+          {compassSupported() && (
+            <section>
+              <h3>Point with your phone</h3>
+              <p className="settings-hint">Aim your phone at the sky and the view follows.</p>
+              <button type="button" className="quiet-button" onClick={() => void onPhoneLook()}>
+                {phoneLookActive ? "Compass mode on" : "Compass mode"}
+              </button>
+              {phoneLookStatus && <p className="location-hint">{phoneLookStatus}</p>}
+            </section>
+          )}
+
+          <section>
+            <h3>Guides</h3>
+            <ul className="settings-guides">
+              {GUIDES.map(([layerId, label, description]) => (
+                <li key={layerId}>
+                  <label className="guide-row">
+                    <span className="guide-text">
+                      <strong>{label}</strong>
+                      <small>{description}</small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      className="switch-input"
+                      checked={layers[layerId]}
+                      onChange={(event) => setLayer(layerId, event.currentTarget.checked)}
+                    />
+                    <span className="switch-track" aria-hidden="true">
+                      <span className="switch-knob" />
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section>
+            <h3>Data &amp; imagery</h3>
+            <ul className="credits-list">
+              <li>
+                Sky:{" "}
+                <a href="https://github.com/cosinekitty/astronomy" target="_blank" rel="noreferrer">
+                  astronomy-engine
+                </a>{" "}
+                (MIT) and the{" "}
+                <a
+                  href="https://github.com/astronexus/HYG-Database"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  HYG star database
+                </a>{" "}
+                (CC BY-SA 4.0)
+              </li>
+              <li>
+                Earth: NASA{" "}
+                <a
+                  href="https://earthobservatory.nasa.gov/features/BlueMarble"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Blue Marble
+                </a>{" "}
+                and{" "}
+                <a
+                  href="https://earthobservatory.nasa.gov/features/NightLights"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Black Marble
+                </a>
+              </li>
+              <li>
+                Moon: NASA{" "}
+                <a href="https://svs.gsfc.nasa.gov/4720" target="_blank" rel="noreferrer">
+                  CGI Moon Kit
+                </a>{" "}
+                (LRO)
+              </li>
+              <li>
+                Planets:{" "}
+                <a
+                  href="https://www.solarsystemscope.com/textures/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Solar System Scope
+                </a>{" "}
+                textures (CC BY 4.0)
+              </li>
+              <li>
+                Places:{" "}
+                <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">
+                  GeoNames
+                </a>{" "}
+                (CC BY 4.0), matched on-device
+              </li>
+            </ul>
+          </section>
+        </div>
       </aside>
     </div>
   );

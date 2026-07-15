@@ -15,9 +15,9 @@ export function wholeEarthFovDegForAspect(viewportAspect: number): number {
 // into the reveal frame (see revealBlendForAltitude).
 const COMPOSITION_ANCHORS = [
   { sliderT: 0, composition: 0 },
-  { sliderT: 0.05, composition: 0.05 },
-  { sliderT: 0.13, composition: 0.55 },
-  { sliderT: 0.2, composition: 1 },
+  { sliderT: 0.03, composition: 0.05 },
+  { sliderT: 0.08, composition: 0.55 },
+  { sliderT: 0.12, composition: 1 },
   { sliderT: 1, composition: 1 },
 ] as const;
 
@@ -94,11 +94,11 @@ export function revealBlendForAltitude(altitudeM: number): number {
 }
 
 /**
- * How far Earth sits right of the frame center during the reveal (radians of
- * gaze yaw). Fades back to center as the heliocentric system takes over so
- * the final 80 AU frame stays centered on the Sun–Earth line.
+ * How far around the planet the reveal vantage swings from the observer's
+ * zenith (radians, about ecliptic north). ~70°: the observer's dot rides
+ * visibly on the SIDE of the tilted globe without slipping onto the limb.
  */
-export const EARTH_SCREEN_OFFSET_RAD = 0.32;
+export const OBSERVER_SWING_RAD = (70 * Math.PI) / 180;
 
 /** Camera vantage above the ecliptic during the reveal (unitless mix toward
  * ecliptic north; ~8.5° of ecliptic latitude — a near-side-on view so the

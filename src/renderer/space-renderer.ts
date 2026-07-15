@@ -21,9 +21,9 @@ import {
 import { stepCriticalSpring, type SpringState } from "../camera/camera-spring";
 import { formatDistanceParts } from "../camera/distance-format";
 import {
-  EARTH_SCREEN_OFFSET_RAD,
   earthMoonCompositionForAltitude,
   journeyCompositionForSlider,
+  OBSERVER_SWING_RAD,
   REVEAL_NORTH_LIFT,
   revealBlendForAltitude,
   systemCompositionForAltitude,
@@ -43,7 +43,7 @@ import {
   observerToZenithQuaternion,
 } from "../scene/earth/continent-outlines";
 import { createEarthGlobeMaterial, loadEarthTextures } from "../scene/earth/earth-globe";
-import { createEarthGuides } from "../scene/earth/earth-guides";
+import { createAxisStubs, createEarthGuides } from "../scene/earth/earth-guides";
 import { buildGlowTexture, SkyLayer } from "../scene/sky/sky-layer";
 import { SolarSystemLayer } from "../scene/sky/solar-system-layer";
 import {
@@ -279,6 +279,7 @@ export class SpaceRenderer {
   private readoutElement: HTMLElement | null = null;
   private readoutLabelElement: HTMLElement | null = null;
   private earthGuides: THREE.LineSegments | null = null;
+  private axisStubs: THREE.LineSegments | null = null;
   private slowFrameStreak = 0;
   private adaptiveDprCap = Number.POSITIVE_INFINITY;
   private lastDprDropMs = 0;
@@ -333,6 +334,8 @@ export class SpaceRenderer {
     this.scene.add(this.solarLayer.group);
     this.earthGuides = createEarthGuides(this.flags.latitudeDeg, this.flags.longitudeDeg);
     this.scene.add(this.earthGuides);
+    this.axisStubs = createAxisStubs(this.flags.latitudeDeg, this.flags.longitudeDeg);
+    this.scene.add(this.axisStubs);
 
     // Real Earth imagery loads after the opening scene; the flat-shaded globe
     // stands in until then and remains the fallback if loading fails.
@@ -567,6 +570,10 @@ export class SpaceRenderer {
             : body.id === "moon"
               ? sky.sun.distanceM
               : Math.hypot(body.helioEqjM[0], body.helioEqjM[1], body.helioEqjM[2]),
+        illuminatedFraction: body.illuminatedFraction,
+        // The lit limb faces the Sun's side of the sky.
+        litOnRight:
+          ((sky.sun.azimuthDeg - body.azimuthDeg + 540) % 360) - 180 > 0,
       })),
     });
   }
@@ -624,9 +631,15 @@ export class SpaceRenderer {
     this.cameraDirLocal.set(0, 1, 0);
     this.arcQuaternion.identity();
     if (revealBlend > 0.001) {
-      const revealDir = new THREE.Vector3()
-        .copy(this.sunDirectionLocal)
-        .multiplyScalar(-1)
+      // The vantage is anchored on the OBSERVER, not the Sun: project the
+      // zenith onto the ecliptic plane, swing ~70° around the planet, and
+      // lift barely above the plane — Earth arrives centered and tilted with
+      // the observer's dot riding its side, whatever the hour.
+      const zenithInPlane = new THREE.Vector3(0, 1, 0)
+        .addScaledVector(this.eclipticNorthLocal, -this.eclipticNorthLocal.y)
+        .normalize();
+      const revealDir = zenithInPlane
+        .applyAxisAngle(this.eclipticNorthLocal, OBSERVER_SWING_RAD)
         .addScaledVector(this.eclipticNorthLocal, REVEAL_NORTH_LIFT)
         .normalize();
       const fullArc = new THREE.Quaternion().setFromUnitVectors(this.cameraDirLocal, revealDir);
@@ -678,6 +691,7 @@ export class SpaceRenderer {
       this.objects.continentOutlines,
     ];
     if (this.earthGuides) globalObjects.push(this.earthGuides);
+    if (this.axisStubs) globalObjects.push(this.axisStubs);
     for (const object of globalObjects) {
       object.position.copy(earthCenterRender);
       object.scale.setScalar(earthRadiusRender);
@@ -688,6 +702,13 @@ export class SpaceRenderer {
       this.earthGuides.visible = layers["earth-axis"] && earthRadiusRender > 0.02;
       // Keep the axis/equator on the textured globe's exact orientation.
       this.earthGuides.quaternion.copy(this.objects.continentOutlines.quaternion);
+    }
+    if (this.axisStubs) {
+      // Default-on tilt cue: rides in with the reveal, leaves with the system.
+      const stubOpacity = revealBlend * (1 - systemReveal) * 0.55;
+      this.axisStubs.visible = stubOpacity > 0.02 && earthRadiusRender > 0.02;
+      (this.axisStubs.material as THREE.LineBasicMaterial).opacity = stubOpacity;
+      this.axisStubs.quaternion.copy(this.objects.continentOutlines.quaternion);
     }
 
     // The old fixed coordinate grid becomes the alt-az sky grid layer.
@@ -862,16 +883,12 @@ export class SpaceRenderer {
     );
 
     // The reveal frame: screen-up on ecliptic north (the plane of the solar
-    // system lies flat across the background) with Earth standing off to the
-    // RIGHT of center, your dot on its side — one slerp from the ground's
-    // free-look frame, so up-rolling and re-aiming arrive together as a
-    // single motion with no nadir detour and no direction reversals.
+    // system lies flat across the background) with Earth dead CENTER, tilted,
+    // the observer's dot on its side and the axis stubs reading the tilt —
+    // one slerp from the ground's free-look frame, so up-rolling and
+    // re-aiming arrive together with no nadir detour and no reversals.
     if (revealBlend > 0.001) {
-      const earthDir = this.cameraDirLocal.clone().multiplyScalar(-1);
-      const gazeTarget = earthDir.applyAxisAngle(
-        this.eclipticNorthLocal,
-        EARTH_SCREEN_OFFSET_RAD * (1 - systemReveal),
-      );
+      const gazeTarget = this.cameraDirLocal.clone().multiplyScalar(-1);
       const lookMatrix = new THREE.Matrix4().lookAt(
         new THREE.Vector3(0, 0, 0),
         gazeTarget,

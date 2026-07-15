@@ -49,3 +49,41 @@ export function createEarthGuides(
   guides.visible = false;
   return guides;
 }
+
+/**
+ * Small default-on axis stubs just above and below the poles — enough to
+ * read the planet's tilt against the flat ecliptic at the whole-Earth
+ * reveal, without the full axis-and-equator guide.
+ */
+export function createAxisStubs(
+  observerLatitudeDeg: number,
+  observerLongitudeDeg: number,
+): THREE.LineSegments {
+  const [poleX, poleY, poleZ] = earthFixedToThree([0, 0, 1]);
+  const points = [
+    poleX * 1.05,
+    poleY * 1.05,
+    poleZ * 1.05,
+    poleX * 1.32,
+    poleY * 1.32,
+    poleZ * 1.32,
+    -poleX * 1.05,
+    -poleY * 1.05,
+    -poleZ * 1.05,
+    -poleX * 1.32,
+    -poleY * 1.32,
+    -poleZ * 1.32,
+  ];
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
+  const material = new THREE.LineBasicMaterial({
+    color: 0xbcd4e6,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  const stubs = new THREE.LineSegments(geometry, material);
+  stubs.quaternion.copy(observerToZenithQuaternion(observerLatitudeDeg, observerLongitudeDeg));
+  stubs.visible = false;
+  return stubs;
+}

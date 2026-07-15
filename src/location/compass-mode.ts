@@ -133,6 +133,26 @@ export function lookFromOrientationEvent(event: OrientationEventLike): Orientati
 export type CompassStop = () => void;
 
 /**
+ * Opt-in live overlay (?compassdebug=1) so on-device misbehavior can be
+ * screenshotted with the raw sensor numbers attached.
+ */
+function createCompassDebugOverlay(): HTMLPreElement | null {
+  if (typeof window === "undefined") return null;
+  if (!new URLSearchParams(window.location.search).has("compassdebug")) return null;
+  let element = document.getElementById("compass-debug") as HTMLPreElement | null;
+  if (!element) {
+    element = document.createElement("pre");
+    element.id = "compass-debug";
+    element.style.cssText =
+      "position:fixed;left:8px;top:88px;z-index:99;margin:0;padding:8px 10px;" +
+      "background:rgba(1,10,16,0.8);color:#9fe0a8;font:11px/1.5 monospace;" +
+      "border-radius:8px;pointer-events:none;white-space:pre;";
+    document.body.appendChild(element);
+  }
+  return element;
+}
+
+/**
  * Request permission if the platform demands it, then stream the device look
  * direction. Resolves null when unsupported or denied.
  */
@@ -152,12 +172,23 @@ export async function startCompass(
     }
   }
   // Magnetometer yaw calibration for the attitude quaternion: alpha's zero
-  // can be arbitrary (iOS), so the quaternion's azimuth is aligned to the
-  // platform compass heading — low-passed, and FROZEN while the device
-  // points near the zenith, where the compass heading itself degenerates.
-  // The quaternion sails smoothly through the zenith on pure geometry.
+  // is arbitrary on iOS and drifts, so the quaternion's azimuth is aligned
+  // to the platform compass heading. The calibration is deliberately
+  // paranoid — the compass reference itself can BRANCH-FLIP by 180° as the
+  // device tips past upright (an artifact of the Euler decomposition, not a
+  // real turn), which is exactly the "spins around at the top of the sky"
+  // bug. So: only sample it near level attitudes, track it slowly, and
+  // reject any jump too large to be drift; the quaternion carries the view
+  // smoothly through the zenith on pure geometry in between.
   let yawCorrectionRad: number | null = null;
+  let rejectedInARow = 0;
+  // Android fires BOTH deviceorientationabsolute and deviceorientation;
+  // mixing the two alpha references whipsaws the view. Absolute wins.
+  let sawAbsolute = false;
+  const debugElement = createCompassDebugOverlay();
   const listener = (event: DeviceOrientationEvent) => {
+    if (event.type === "deviceorientationabsolute") sawAbsolute = true;
+    else if (sawAbsolute) return;
     const eventLike = event as unknown as OrientationEventLike;
     const look = lookFromOrientationEvent(eventLike);
     const screenOrientationDeg =
@@ -168,24 +199,44 @@ export async function startCompass(
       const azimuthRad = Math.atan2(gaze[0], -gaze[2]);
       const pitchDeg = Math.asin(Math.min(1, Math.max(-1, gaze[1]))) / DEG;
       const platformHeadingDeg = headingFromOrientationEvent(eventLike);
-      if (platformHeadingDeg !== null && Math.abs(pitchDeg) < 60) {
+      if (platformHeadingDeg !== null && Math.abs(pitchDeg) < 30) {
         const target = wrapRad(azimuthRad - platformHeadingDeg * DEG);
-        yawCorrectionRad =
-          yawCorrectionRad === null
-            ? target
-            : yawCorrectionRad + wrapRad(target - yawCorrectionRad) * 0.15;
+        if (yawCorrectionRad === null) {
+          yawCorrectionRad = target;
+        } else {
+          const delta = wrapRad(target - yawCorrectionRad);
+          // Drift is slow; a large delta is a compass branch flip — ignore
+          // it unless it persists for a couple of seconds (a genuine
+          // re-reference, e.g. the platform re-zeroing alpha).
+          if (Math.abs(delta) < 0.7) {
+            yawCorrectionRad = wrapRad(yawCorrectionRad + delta * 0.03);
+            rejectedInARow = 0;
+          } else {
+            rejectedInARow += 1;
+            if (rejectedInARow > 120) {
+              yawCorrectionRad = target;
+              rejectedInARow = 0;
+            }
+          }
+        }
       }
       if (yawCorrectionRad !== null) {
-        const calibrated = quatMultiply(
-          quatFromAxisAngle(0, 1, 0, yawCorrectionRad),
-          attitude,
-        );
+        const calibrated = quatMultiply(quatFromAxisAngle(0, 1, 0, yawCorrectionRad), attitude);
         const calibratedGaze = rotateVector(calibrated, [0, 0, -1]);
         const headingDeg =
           ((Math.atan2(calibratedGaze[0], -calibratedGaze[2]) / DEG) % 360 + 360) % 360;
+        const calibratedPitchDeg =
+          Math.asin(Math.min(1, Math.max(-1, calibratedGaze[1]))) / DEG;
+        if (debugElement) {
+          debugElement.textContent =
+            `α ${event.alpha?.toFixed(1)} β ${event.beta?.toFixed(1)} γ ${event.gamma?.toFixed(1)}\n` +
+            `platform ${platformHeadingDeg?.toFixed(1) ?? "–"}° · type ${event.type}\n` +
+            `heading ${headingDeg.toFixed(1)}° pitch ${calibratedPitchDeg.toFixed(1)}°\n` +
+            `correction ${((yawCorrectionRad / DEG + 360) % 360).toFixed(1)}° rejects ${rejectedInARow}`;
+        }
         onLook({
           headingDeg,
-          pitchDeg: Math.asin(Math.min(1, Math.max(-1, calibratedGaze[1]))) / DEG,
+          pitchDeg: calibratedPitchDeg,
           quaternion: calibrated,
         });
         return;

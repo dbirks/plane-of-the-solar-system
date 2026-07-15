@@ -214,19 +214,25 @@ export class SkyOverlay {
           const rotationDeg = (Math.atan2(ndcX, -ndcY) * 180) / Math.PI;
           entry.element.style.setProperty("--edge-rotation", `${rotationDeg.toFixed(1)}deg`);
         }
+        const ghosted2 = entry.element.classList.contains("sky-marker--ghost");
+        // In the sky view (ground and atmosphere) on-screen bodies wear a
+        // big, soft, muted circle — a gentle "it's right here" highlight.
+        // Out in space the pointer arrow takes over.
+        const skyCircle = altitudeM < PROXY_FADE_END_ALTITUDE_M && !atEdge && !ghosted2;
+        entry.element.classList.toggle("sky-marker--sky", skyCircle);
         // A body whose disc is plainly visible on screen needs no pointer —
         // the label alone tags it (nothing drawn around the whole Earth or
         // near Moon). Edge-pinned markers keep theirs: the disc is out of view.
-        const resolved =
-          apparentRadiusDeg > 0.175 &&
-          !atEdge &&
-          !entry.element.classList.contains("sky-marker--ghost");
+        const resolved = apparentRadiusDeg > 0.175 && !atEdge && !ghosted2 && !skyCircle;
         entry.element.classList.toggle("sky-marker--resolved", resolved);
         const screenX = ((ndcX + 1) / 2) * width;
         const screenY = ((1 - ndcY) / 2) * height;
-        // Near the bottom of the frame the label flips above the dot so it
-        // stays readable (edge-pinned markers there would otherwise clip).
-        entry.element.classList.toggle("sky-marker--label-above", screenY > height - 64);
+        // Arrow markers read best with the label ON TOP of the arrow (it
+        // points down at the body below); sky circles and ghosts keep the
+        // label underneath. Both flip near their clipping screen edge.
+        const labelAbove =
+          skyCircle || ghosted2 ? screenY > height - 64 : screenY >= 80;
+        entry.element.classList.toggle("sky-marker--label-above", labelAbove);
         entry.screenX = screenX;
         entry.screenY = screenY;
         entry.visible = true;

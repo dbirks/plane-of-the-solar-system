@@ -458,7 +458,7 @@ export class SkyLayer {
     let vertexCount = 0;
     for (const path of this.bandDashPaths) {
       const samples = path.length / 3;
-      for (let i = 0; i < samples; i += 3) {
+      for (let i = 0; i < samples; i += 2) {
         const next = (i + 1) % samples;
         const ax = path[i * 3]!;
         const ay = path[i * 3 + 1]!;
@@ -698,8 +698,9 @@ export class SkyLayer {
     this.eclipticBandFill.visible = bandOpacity > 0.003;
     (this.eclipticBandFill.material as THREE.MeshBasicMaterial).opacity = bandOpacity * 0.3;
     // The dotted continuation matters while the ground hides the lower sky;
-    // it hands off as the ground itself fades from view.
-    const belowOpacity = bandOpacity * groundFade;
+    // it hands off as the ground itself fades from view. Noticeably brighter
+    // than the band fill so the loop-around actually reads.
+    const belowOpacity = Math.min(1, bandOpacity * 2.4) * groundFade;
     this.eclipticBandBelow.visible = belowOpacity > 0.003;
     (this.eclipticBandBelow.material as THREE.LineBasicMaterial).opacity = belowOpacity;
     const groundStarOpacity = clamp01((-sunAltitudeDeg - 3) / 11);

@@ -51,3 +51,12 @@ Both textures load asynchronously after the opening scene; the code-native flat-
 - **Processing:** resized to 2048×1024, JPEG quality 82 via ImageMagick
 - **Output path:** `public/textures/moon-lroc-2048.jpg` (330 KB)
 - **Use:** albedo on the physically-lit Moon mesh (terminator stays true geometry); flat shading remains the fallback. Tidally-locked orientation, libration ignored (ADR-0009).
+
+## Planet imagery (round 8)
+
+- **Assets:** equirectangular surface maps for Mercury, Venus (atmosphere), Mars, Jupiter, Saturn, Uranus, Neptune
+- **Source:** <https://www.solarsystemscope.com/textures/> (2k downloads)
+- **License:** CC BY 4.0 (Solar System Scope / INOVE), attributed in the Settings credits
+- **Processing:** resized to 1024×512, JPEG quality 78 via ImageMagick (364 KB total)
+- **Output paths:** `public/textures/planet-<name>-1024.jpg`
+- **Use:** the selection inset draws each planet's facing hemisphere as a disc with the physically correct phase (illuminated fraction from astronomy-engine; the lit limb faces the Sun's side of the sky). Pluto has no freely licensed map here and falls back to a tinted disc. The main scene still renders true sizes only — this close-up is labeled UI.
