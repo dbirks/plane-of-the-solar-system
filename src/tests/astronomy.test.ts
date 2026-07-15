@@ -1,6 +1,7 @@
 import { Body, Equator, MakeTime, Observer } from "astronomy-engine";
 import { describe, expect, it } from "vitest";
 
+import { marsSeasonLabel, marsSolarLongitudeDeg } from "../astronomy/mars-season";
 import { computeEclipticRingEqjM, eclipticNorthEqj } from "../astronomy/planet-orbits";
 import { altAzToLocalThree, computeSkyState, computeSunHorizonEvents } from "../astronomy/sky-state";
 import type { Vec3d } from "../coordinates/vec3d";
@@ -260,5 +261,21 @@ describe("sky-shell ecliptic band placement (EQJ ring through eqjToLocalThree, d
       // band's ±1.5° half-width.
       expect(eclipticLatitudeDeg).toBeLessThan(0.5);
     }
+  });
+});
+
+describe("marsSolarLongitudeDeg (areocentric Ls, degrees)", () => {
+  it("pins Ls ≈ 0 at the Mars Year 36 northern spring equinox (2021-02-07)", () => {
+    const ls = marsSolarLongitudeDeg(Date.parse("2021-02-07T00:00:00Z"));
+    const distanceFromZero = Math.min(ls, 360 - ls);
+    expect(distanceFromZero).toBeLessThan(2);
+  });
+
+  it("labels the four quadrants", () => {
+    // Ls advances ~0.5°/day; pick epochs a season apart from the MY36 equinox.
+    expect(marsSeasonLabel(Date.parse("2021-03-15T00:00:00Z"))).toContain("Northern spring");
+    expect(marsSeasonLabel(Date.parse("2021-09-01T00:00:00Z"))).toContain("Northern summer");
+    expect(marsSeasonLabel(Date.parse("2022-03-01T00:00:00Z"))).toContain("Northern autumn");
+    expect(marsSeasonLabel(Date.parse("2022-08-15T00:00:00Z"))).toContain("Northern winter");
   });
 });

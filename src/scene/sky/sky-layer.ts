@@ -692,7 +692,10 @@ export class SkyLayer {
 
     // The sky-shell ecliptic hands off to the heliocentric rings and orbit
     // lines as the physical system fades in.
-    const bandOpacity = eclipticBandEnabled ? 0.14 * (1 - systemReveal) : 0;
+    // Daylight washes the band out against the bright sky and ground, so it
+    // leans brighter while the Sun is up (night keeps the subtle look).
+    const daylightBoost = 1 + clamp01((sunAltitudeDeg + 2) / 8) * 1.2;
+    const bandOpacity = eclipticBandEnabled ? 0.14 * daylightBoost * (1 - systemReveal) : 0;
     this.eclipticBand.visible = bandOpacity > 0.003;
     (this.eclipticBand.material as THREE.LineBasicMaterial).opacity = bandOpacity;
     this.eclipticBandFill.visible = bandOpacity > 0.003;

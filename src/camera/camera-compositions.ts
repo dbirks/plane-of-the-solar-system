@@ -15,9 +15,9 @@ export function wholeEarthFovDegForAspect(viewportAspect: number): number {
 // into the reveal frame (see revealBlendForAltitude).
 const COMPOSITION_ANCHORS = [
   { sliderT: 0, composition: 0 },
-  { sliderT: 0.03, composition: 0.05 },
-  { sliderT: 0.08, composition: 0.55 },
-  { sliderT: 0.12, composition: 1 },
+  { sliderT: 0.04, composition: 0.35 },
+  { sliderT: 0.1, composition: 0.8 },
+  { sliderT: 0.15, composition: 1 },
   { sliderT: 1, composition: 1 },
 ] as const;
 
@@ -88,17 +88,20 @@ export function systemCompositionForAltitude(altitudeM: number, baseFovDeg: numb
  * there out, nothing re-aims; the frame only zooms.
  */
 export function revealBlendForAltitude(altitudeM: number): number {
+  // From ~300 m up (a thousand feet): the camera starts swinging around the
+  // planet almost as soon as the ground lets go, and the frame is fully
+  // settled by ~2000 km — the rest of the journey is pure zoom.
   const logAltitude = Math.log10(Math.max(1, altitudeM));
-  const t = Math.min(1, Math.max(0, (logAltitude - 4) / (6.6 - 4)));
+  const t = Math.min(1, Math.max(0, (logAltitude - 2.5) / (6.3 - 2.5)));
   return t * t * (3 - 2 * t);
 }
 
 /**
  * How far around the planet the reveal vantage swings from the observer's
- * zenith (radians, about ecliptic north). ~70°: the observer's dot rides
- * visibly on the SIDE of the tilted globe without slipping onto the limb.
+ * zenith (radians, about ecliptic north). ~45°: the observer's dot stays
+ * front-ish on the tilted globe, facing the camera, clearly on a side.
  */
-export const OBSERVER_SWING_RAD = (70 * Math.PI) / 180;
+export const OBSERVER_SWING_RAD = (45 * Math.PI) / 180;
 
 /** Camera vantage above the ecliptic during the reveal (unitless mix toward
  * ecliptic north; ~8.5° of ecliptic latitude — a near-side-on view so the

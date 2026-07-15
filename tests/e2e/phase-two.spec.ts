@@ -137,7 +137,7 @@ test("sky-proxy markers fade on the journey while the physical Moon's persists",
   page,
 }) => {
   await page.goto(moonScenario);
-  await page.getByRole("slider", { name: "Distance from the ground" }).fill("0.3");
+  await page.getByRole("slider", { name: "Distance from the ground" }).fill("0.22");
   const sunMarker = page.locator(".sky-marker[data-body=sun]");
   await expect
     .poll(async () => sunMarker.evaluate((element) => element.style.display), {

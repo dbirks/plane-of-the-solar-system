@@ -417,17 +417,53 @@ export class SpaceRenderer {
 
   private bindInput(): void {
     const onResize = () => this.resize();
+    // Two live pointers = a pinch: their separation travels the journey
+    // (spread descends toward the ground, pinch pulls out), and look-drag
+    // pauses so the view doesn't wander while zooming.
+    const activePointers = new Map<number, { x: number; y: number }>();
+    let pinchDistancePx: number | null = null;
     const onPointerDown = (event: PointerEvent) => {
+      activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      this.canvas.setPointerCapture(event.pointerId);
+      if (activePointers.size === 2) {
+        const [a, b] = [...activePointers.values()];
+        pinchDistancePx = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+        this.pointerId = null;
+        this.canvas.classList.remove("is-dragging");
+        return;
+      }
+      if (activePointers.size > 2) return;
       this.pointerId = event.pointerId;
       this.guidanceRequested = false;
       this.lookTarget = null;
       this.lastPointer = { x: event.clientX, y: event.clientY };
       this.pointerDownAt = { x: event.clientX, y: event.clientY, timeMs: performance.now() };
       this.pointerTravelPx = 0;
-      this.canvas.setPointerCapture(event.pointerId);
       this.canvas.classList.add("is-dragging");
     };
     const onPointerMove = (event: PointerEvent) => {
+      const tracked = activePointers.get(event.pointerId);
+      if (tracked) {
+        tracked.x = event.clientX;
+        tracked.y = event.clientY;
+      }
+      if (activePointers.size >= 2 && pinchDistancePx !== null) {
+        const [a, b] = [...activePointers.values()];
+        const distance = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+        if (distance > 20) {
+          // Log-scale travel: a full spread across the screen moves roughly
+          // one landmark leg.
+          const currentT = distanceToSlider(useAppStore.getState().targetDistanceM);
+          const nextT = THREE.MathUtils.clamp(
+            currentT + Math.log(pinchDistancePx / distance) * 0.25,
+            0,
+            1,
+          );
+          useAppStore.getState().setTargetDistanceM(sliderToDistance(nextT));
+          pinchDistancePx = distance;
+        }
+        return;
+      }
       if (event.pointerId !== this.pointerId) return;
       const sensitivity = 0.004;
       this.yawOffset -= (event.clientX - this.lastPointer.x) * sensitivity;
@@ -441,6 +477,8 @@ export class SpaceRenderer {
       this.lastPointer = { x: event.clientX, y: event.clientY };
     };
     const onPointerUp = (event: PointerEvent) => {
+      activePointers.delete(event.pointerId);
+      if (activePointers.size < 2) pinchDistancePx = null;
       if (event.pointerId !== this.pointerId) return;
       this.pointerId = null;
       this.canvas.classList.remove("is-dragging");
@@ -705,7 +743,7 @@ export class SpaceRenderer {
     }
     if (this.axisStubs) {
       // Default-on tilt cue: rides in with the reveal, leaves with the system.
-      const stubOpacity = revealBlend * (1 - systemReveal) * 0.55;
+      const stubOpacity = layers["axis-stubs"] ? revealBlend * (1 - systemReveal) * 0.55 : 0;
       this.axisStubs.visible = stubOpacity > 0.02 && earthRadiusRender > 0.02;
       (this.axisStubs.material as THREE.LineBasicMaterial).opacity = stubOpacity;
       this.axisStubs.quaternion.copy(this.objects.continentOutlines.quaternion);
@@ -722,12 +760,12 @@ export class SpaceRenderer {
     this.objects.localCap.visible = localFade > 0.001;
     (this.objects.localCap.material as THREE.MeshStandardMaterial).opacity = localFade;
 
-    // The observer's dot appears as soon as the gaze starts sweeping down —
-    // "that is where I am standing" anchors the rest of the pull-out — and
-    // retires on the way to the Earth–Moon landmark, where "where exactly on
-    // the ball" stops mattering.
+    // The observer's dot appears almost immediately on pull-out (with the
+    // reveal, from a few hundred meters) — "that is where I am standing"
+    // anchors the journey — and retires on the way to the Earth–Moon
+    // landmark, where "where exactly on the ball" stops mattering.
     const markerReveal =
-      smoothstep(1_500, 30_000, altitudeM) * (1 - smoothstep(1.2e8, 4e8, altitudeM));
+      smoothstep(250, 4_000, altitudeM) * (1 - smoothstep(1.2e8, 4e8, altitudeM));
     const markerDistanceRender = observerSurfaceRender.length();
     const markerSize = Math.max(0.002, markerDistanceRender * 0.006);
     this.objects.observerMarker.position.copy(observerSurfaceRender);

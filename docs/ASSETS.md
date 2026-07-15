@@ -60,3 +60,12 @@ Both textures load asynchronously after the opening scene; the code-native flat-
 - **Processing:** resized to 1024×512, JPEG quality 78 via ImageMagick (364 KB total)
 - **Output paths:** `public/textures/planet-<name>-1024.jpg`
 - **Use:** the selection inset draws each planet's facing hemisphere as a disc with the physically correct phase (illuminated fraction from astronomy-engine; the lit limb faces the Sun's side of the sky). Pluto has no freely licensed map here and falls back to a tinted disc. The main scene still renders true sizes only — this close-up is labeled UI.
+
+## Pluto imagery (round 9)
+
+- **Asset:** New Horizons global color mosaic of Pluto (LORRI + MVIC), the heart (Sputnik Planitia) centered
+- **Source:** <https://www.jpl.nasa.gov/images/pia11707-pluto-color-map/> (PIA11707)
+- **Credit:** NASA / Johns Hopkins APL / Southwest Research Institute — public domain
+- **Processing:** resized to 1024×512, JPEG quality 78 via ImageMagick (60 KB)
+- **Output path:** `public/textures/planet-pluto-1024.jpg`
+- **Use:** the Pluto selection inset. The unimaged southern hemisphere (dark during the 2015 flyby) remains black — honest data, not a rendering bug.

@@ -41,6 +41,7 @@ export type LayerId =
   | "ecliptic-rings"
   | "moon-orbit"
   | "sun-guide"
+  | "axis-stubs"
   | "earth-axis"
   | "sky-grid"
   | "marker-labels"
@@ -53,6 +54,7 @@ export const DEFAULT_LAYERS: LayersState = {
   "ecliptic-rings": true,
   "moon-orbit": true,
   "sun-guide": true,
+  "axis-stubs": true,
   "earth-axis": false,
   "sky-grid": false,
   "marker-labels": true,

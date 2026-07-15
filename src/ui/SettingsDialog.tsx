@@ -9,7 +9,8 @@ const GUIDES: ReadonlyArray<[LayerId, string, string]> = [
   ["ecliptic-rings", "Ecliptic plane", "The flat plane the planets ride, at every scale."],
   ["moon-orbit", "Moon orbit", "The Moon's real path around Earth."],
   ["sun-guide", "Sunlight direction", "A line from Earth toward the Sun."],
-  ["earth-axis", "Earth axis & equator", "The spin axis and equator drawn on the globe."],
+  ["axis-stubs", "Earth tilt", "Small axis lines above and below the poles."],
+  ["earth-axis", "Earth axis & equator", "The full spin axis and equator drawn on the globe."],
   ["sky-grid", "Sky grid", "Altitude and azimuth lines over the sky."],
   ["marker-labels", "Marker labels", "Names beside the body markers."],
   ["below-horizon-markers", "Below-horizon markers", "Keep markers for bodies under the horizon."],
@@ -162,7 +163,15 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 >
                   Solar System Scope
                 </a>{" "}
-                textures (CC BY 4.0)
+                textures (CC BY 4.0); Pluto:{" "}
+                <a
+                  href="https://www.jpl.nasa.gov/images/pia11707-pluto-color-map/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  NASA New Horizons
+                </a>{" "}
+                (NASA/JHUAPL/SwRI)
               </li>
               <li>
                 Places:{" "}

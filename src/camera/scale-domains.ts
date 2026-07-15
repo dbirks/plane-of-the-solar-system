@@ -3,14 +3,7 @@ import { EARTH_MEAN_RADIUS_M } from "../coordinates/units";
 export type ScaleDomain = "local" | "earth-centered" | "heliocentric";
 
 export type ScaleLandmark = {
-  id:
-    | "ground"
-    | "atmosphere"
-    | "low-orbit"
-    | "whole-earth"
-    | "earth-moon"
-    | "inner-system"
-    | "full-system";
+  id: "ground" | "whole-earth" | "earth-moon" | "inner-system" | "full-system";
   label: string;
   distanceM: number;
   sliderT: number;
@@ -21,26 +14,22 @@ export const JOURNEY_MIN_DISTANCE_M = 2;
 // the final frame with margin.
 export const JOURNEY_MAX_DISTANCE_M = 12_000_000_000_000;
 
-// The whole ground → whole-Earth leg is deliberately quick — nothing
-// actionable happens until the planet is a ball, so the first tenth of the
-// slider covers it all and the journey beyond owns the rest.
+// Ground goes straight to whole Earth — the atmosphere and low-orbit stops
+// carried nothing actionable, so they are gone from the rail entirely and
+// the journey beyond the ball owns the slider.
 export const JOURNEY_LANDMARKS: readonly ScaleLandmark[] = [
   { id: "ground", label: "Ground", distanceM: 2, sliderT: 0 },
-  { id: "atmosphere", label: "Atmosphere", distanceM: 100_000, sliderT: 0.12 },
-  { id: "low-orbit", label: "Low orbit", distanceM: 500_000, sliderT: 0.18 },
-  { id: "whole-earth", label: "Whole Earth", distanceM: 20_000_000, sliderT: 0.3 },
-  { id: "earth-moon", label: "Earth–Moon", distanceM: 500_000_000, sliderT: 0.48 },
-  { id: "inner-system", label: "Inner system", distanceM: 400_000_000_000, sliderT: 0.76 },
+  { id: "whole-earth", label: "Whole Earth", distanceM: 20_000_000, sliderT: 0.22 },
+  { id: "earth-moon", label: "Earth–Moon", distanceM: 500_000_000, sliderT: 0.42 },
+  { id: "inner-system", label: "Inner system", distanceM: 400_000_000_000, sliderT: 0.72 },
   { id: "full-system", label: "Solar system", distanceM: JOURNEY_MAX_DISTANCE_M, sliderT: 1 },
 ];
 
 const JOURNEY_SCALE_ANCHORS = [
   { sliderT: 0, distanceM: JOURNEY_MIN_DISTANCE_M },
-  { sliderT: 0.12, distanceM: 100_000 },
-  { sliderT: 0.18, distanceM: 500_000 },
-  { sliderT: 0.3, distanceM: 20_000_000 },
-  { sliderT: 0.48, distanceM: 500_000_000 },
-  { sliderT: 0.76, distanceM: 400_000_000_000 },
+  { sliderT: 0.22, distanceM: 20_000_000 },
+  { sliderT: 0.42, distanceM: 500_000_000 },
+  { sliderT: 0.72, distanceM: 400_000_000_000 },
   { sliderT: 1, distanceM: JOURNEY_MAX_DISTANCE_M },
 ] as const;
 

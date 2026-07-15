@@ -2,14 +2,16 @@ import { useEffect, useRef } from "react";
 
 import { formatDistance } from "../camera/distance-format";
 import { METERS_PER_AU } from "../coordinates/units";
+import { marsSeasonLabel } from "../astronomy/mars-season";
 import type { SkyBodyId } from "../astronomy/sky-state";
 import { useAppStore } from "../app/app-store";
 import { drawPhaseDisc } from "./phase-disc";
 
 const DISC_SIZE_PX = 104;
 
-// Surface maps for the planet discs (Solar System Scope, CC BY 4.0). The Sun
-// gets a plain glow tint; Pluto has no bundled map and falls back to a tint.
+// Surface maps for the planet discs (Solar System Scope, CC BY 4.0; Pluto:
+// NASA New Horizons mosaic, public domain — the heart sits center-face).
+// The Sun gets a plain glow tint.
 const TEXTURED: Partial<Record<SkyBodyId, string>> = {
   mercury: "planet-mercury-1024.jpg",
   venus: "planet-venus-1024.jpg",
@@ -18,6 +20,7 @@ const TEXTURED: Partial<Record<SkyBodyId, string>> = {
   saturn: "planet-saturn-1024.jpg",
   uranus: "planet-uranus-1024.jpg",
   neptune: "planet-neptune-1024.jpg",
+  pluto: "planet-pluto-1024.jpg",
 };
 
 const TINTS: Partial<Record<SkyBodyId, string>> = {
@@ -89,11 +92,11 @@ export function BodyInset() {
         <span className="eyebrow">{body.label}</span>
         <button
           type="button"
-          className="quiet-button"
+          className="quiet-button icon-button inset-close"
           onClick={() => setSelectedBodyId(null)}
           aria-label={`Close ${body.label} details`}
         >
-          Close
+          ×
         </button>
       </header>
       <div className="moon-inset-body">
@@ -130,6 +133,12 @@ export function BodyInset() {
             <dt>Magnitude</dt>
             <dd>{body.magnitude.toFixed(1)}</dd>
           </div>
+          {body.id === "mars" && (
+            <div>
+              <dt>Season</dt>
+              <dd>{marsSeasonLabel(Date.now())}</dd>
+            </div>
+          )}
         </dl>
       </div>
       <p className="moon-inset-note">

@@ -32,12 +32,12 @@ describe("logarithmic journey scale", () => {
   });
 
   it("uses perceptual logarithmic anchors for a responsive ascent", () => {
-    // The whole quiet ground → whole-Earth leg fits the first ~third; the
-    // journey beyond, where the system assembles, owns most of the slider.
-    expect(distanceToSlider(100_000)).toBeCloseTo(0.12, 12);
-    expect(distanceToSlider(500_000)).toBeCloseTo(0.18, 12);
-    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.3, 12);
-    expect(distanceToSlider(500_000_000)).toBeCloseTo(0.48, 12);
+    // Ground goes straight to whole Earth (no atmosphere / low-orbit stops);
+    // the journey beyond, where the system assembles, owns most of the rail.
+    expect(distanceToSlider(20_000_000)).toBeCloseTo(0.22, 12);
+    expect(distanceToSlider(500_000_000)).toBeCloseTo(0.42, 12);
+    expect(distanceToSlider(400_000_000_000)).toBeCloseTo(0.72, 12);
+    expect(JOURNEY_LANDMARKS).toHaveLength(5);
     expect(JOURNEY_LANDMARKS.at(-1)).toMatchObject({
       id: "full-system",
       distanceM: 12_000_000_000_000,
@@ -45,16 +45,16 @@ describe("logarithmic journey scale", () => {
   });
 
   it("gently attracts near a landmark without trapping distant values", () => {
-    const atmosphereT = distanceToSlider(
-      JOURNEY_LANDMARKS.find((item) => item.id === "atmosphere")!.distanceM,
+    const wholeEarthT = distanceToSlider(
+      JOURNEY_LANDMARKS.find((item) => item.id === "whole-earth")!.distanceM,
     );
-    const near = atmosphereT + 0.01;
-    expect(Math.abs(applySoftLandmarkAttraction(near) - atmosphereT)).toBeLessThan(
-      Math.abs(near - atmosphereT),
+    const near = wholeEarthT + 0.01;
+    expect(Math.abs(applySoftLandmarkAttraction(near) - wholeEarthT)).toBeLessThan(
+      Math.abs(near - wholeEarthT),
     );
-    // Midway between the atmosphere (0.12) and low-orbit (0.18) anchors,
-    // outside both attraction radii.
-    expect(applySoftLandmarkAttraction(atmosphereT + 0.03)).toBeCloseTo(atmosphereT + 0.03, 12);
+    // Well between whole-Earth (0.22) and Earth–Moon (0.42), outside both
+    // attraction radii.
+    expect(applySoftLandmarkAttraction(wholeEarthT + 0.08)).toBeCloseTo(wholeEarthT + 0.08, 12);
   });
 });
 
@@ -81,44 +81,41 @@ describe("whole-Earth composition", () => {
     expect(wholeEarthFovDegForAspect(390 / 844)).toBeLessThanOrEqual(76);
   });
 
-  it("settles the FOV by the atmosphere landmark", () => {
+  it("settles the FOV early in the pull-out", () => {
     expect(journeyCompositionForSlider(0)).toBe(0);
-    expect(journeyCompositionForSlider(0.08)).toBeCloseTo(0.55, 12);
-    expect(journeyCompositionForSlider(0.12)).toBe(1);
-    expect(journeyCompositionForSlider(0.18)).toBe(1);
-    expect(journeyCompositionForSlider(0.3)).toBe(1);
+    expect(journeyCompositionForSlider(0.04)).toBeCloseTo(0.35, 12);
+    expect(journeyCompositionForSlider(0.15)).toBe(1);
+    expect(journeyCompositionForSlider(0.22)).toBe(1);
     expect(journeyCompositionForSlider(1)).toBe(1);
   });
 
-  it("runs the reveal as one motion from ~10 km, settled before whole Earth", () => {
+  it("runs the reveal as one motion from ~300 m, settled before whole Earth", () => {
     expect(revealBlendForAltitude(2)).toBe(0);
-    expect(revealBlendForAltitude(10_000)).toBe(0);
-    // The plane starts flattening on the way to the atmosphere…
-    expect(revealBlendForAltitude(100_000)).toBeGreaterThan(0.2);
-    expect(revealBlendForAltitude(100_000)).toBeLessThan(0.6);
-    // …keeps turning smoothly through low orbit (nothing new starts there)…
-    expect(revealBlendForAltitude(500_000)).toBeGreaterThan(0.5);
-    expect(revealBlendForAltitude(500_000)).toBeLessThan(0.95);
+    expect(revealBlendForAltitude(200)).toBe(0);
+    // The camera starts swinging almost as soon as the ground lets go…
+    expect(revealBlendForAltitude(1_000)).toBeGreaterThan(0.02);
+    expect(revealBlendForAltitude(100_000)).toBeGreaterThan(0.5);
+    expect(revealBlendForAltitude(100_000)).toBeLessThan(0.95);
     // …and is fully settled well before whole Earth: from there out the
     // journey only zooms.
-    expect(revealBlendForAltitude(4_000_000)).toBe(1);
+    expect(revealBlendForAltitude(2_000_000)).toBe(1);
     expect(revealBlendForAltitude(20_000_000)).toBe(1);
     expect(revealBlendForAltitude(8_000_000_000_000)).toBe(1);
     // Monotonic through the whole band.
     let previous = 0;
-    for (let exponent = 4; exponent <= 6.6; exponent += 0.05) {
+    for (let exponent = 2.5; exponent <= 6.3; exponent += 0.05) {
       const value = revealBlendForAltitude(10 ** exponent);
       expect(value).toBeGreaterThanOrEqual(previous);
       previous = value;
     }
   });
 
-  it("swings the vantage well around the observer, near the plane", () => {
-    // ~70° around from the observer's zenith keeps the dot on the visible
-    // side of the tilted globe (not the limb); ~8.5° of ecliptic latitude
-    // keeps the plane a near-flat line rather than a disc seen from above.
-    expect(OBSERVER_SWING_RAD).toBeGreaterThan(1.0);
-    expect(OBSERVER_SWING_RAD).toBeLessThan(1.5);
+  it("swings the vantage moderately around the observer, near the plane", () => {
+    // ~45° around from the observer's zenith keeps the dot front-ish on the
+    // tilted globe, facing the camera; ~8.5° of ecliptic latitude keeps the
+    // plane a near-flat line rather than a disc seen from above.
+    expect(OBSERVER_SWING_RAD).toBeGreaterThan(0.6);
+    expect(OBSERVER_SWING_RAD).toBeLessThan(1.0);
     const elevationDeg = (Math.asin(REVEAL_NORTH_LIFT / Math.hypot(1, REVEAL_NORTH_LIFT)) * 180) / Math.PI;
     expect(elevationDeg).toBeGreaterThan(4);
     expect(elevationDeg).toBeLessThan(15);

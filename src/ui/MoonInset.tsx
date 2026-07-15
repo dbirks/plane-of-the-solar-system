@@ -47,11 +47,11 @@ export function MoonInset() {
         <span className="eyebrow">The Moon right now</span>
         <button
           type="button"
-          className="quiet-button"
+          className="quiet-button icon-button inset-close"
           onClick={() => setSelectedBodyId(null)}
           aria-label="Close Moon inspection"
         >
-          Close
+          ×
         </button>
       </header>
       <div className="moon-inset-body">
