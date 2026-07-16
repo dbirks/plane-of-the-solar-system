@@ -61,7 +61,9 @@ export function earthMoonCompositionForAltitude(
 
   // Angle between the Earth-pinned gaze and the Moon's direction.
   const separationCos =
-    moonRayLocal[0] * gazeLocal[0] + moonRayLocal[1] * gazeLocal[1] + moonRayLocal[2] * gazeLocal[2];
+    moonRayLocal[0] * gazeLocal[0] +
+    moonRayLocal[1] * gazeLocal[1] +
+    moonRayLocal[2] * gazeLocal[2];
   const separationDeg = (Math.acos(Math.min(1, Math.max(-1, separationCos))) * 180) / Math.PI;
   const fovDeg = Math.min(78, Math.max(baseFovDeg, separationDeg * 2.2 + 8));
 

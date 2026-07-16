@@ -57,7 +57,10 @@ export function formatDistanceParts(
     }
     if (distanceM < 1_000_000) {
       const miles = altitudeM / METERS_PER_MILE;
-      return { label: "Altitude", value: `${miles < 100 ? miles.toFixed(1) : Math.round(miles)} mi` };
+      return {
+        label: "Altitude",
+        value: `${miles < 100 ? miles.toFixed(1) : Math.round(miles)} mi`,
+      };
     }
     if (distanceM < 0.1 * METERS_PER_AU) {
       return {

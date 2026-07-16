@@ -224,9 +224,8 @@ export async function startCompass(
         const calibrated = quatMultiply(quatFromAxisAngle(0, 1, 0, yawCorrectionRad), attitude);
         const calibratedGaze = rotateVector(calibrated, [0, 0, -1]);
         const headingDeg =
-          ((Math.atan2(calibratedGaze[0], -calibratedGaze[2]) / DEG) % 360 + 360) % 360;
-        const calibratedPitchDeg =
-          Math.asin(Math.min(1, Math.max(-1, calibratedGaze[1]))) / DEG;
+          (((Math.atan2(calibratedGaze[0], -calibratedGaze[2]) / DEG) % 360) + 360) % 360;
+        const calibratedPitchDeg = Math.asin(Math.min(1, Math.max(-1, calibratedGaze[1]))) / DEG;
         if (debugElement) {
           debugElement.textContent =
             `α ${event.alpha?.toFixed(1)} β ${event.beta?.toFixed(1)} γ ${event.gamma?.toFixed(1)}\n` +

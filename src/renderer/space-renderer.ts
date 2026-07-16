@@ -34,6 +34,7 @@ import {
   distanceToSlider,
   earthRenderRadiusForAltitude,
   JOURNEY_MIN_DISTANCE_M,
+  nearPlaneRenderUnitsForAltitude,
   renderUnitsPerMeterForAltitude,
   scaleDomainForDistance,
   sliderToDistance,
@@ -351,10 +352,7 @@ export class SpaceRenderer {
     // the first frames on phones, and the imagery only matters above 15 m.
     window.setTimeout(() => {
       if (this.disposed || !this.scene) return;
-      this.satellitePatches = new SatellitePatches(
-        this.flags.latitudeDeg,
-        this.flags.longitudeDeg,
-      );
+      this.satellitePatches = new SatellitePatches(this.flags.latitudeDeg, this.flags.longitudeDeg);
       this.scene.add(this.satellitePatches.group);
     }, 2_500);
 
@@ -416,10 +414,7 @@ export class SpaceRenderer {
    * camera sits at earth-center + (R + altitude) along `cameraDirLocal`
    * (the observer zenith near the ground, the reveal arc beyond).
    */
-  private rayFromGeoLocal(
-    geoLocalM: Vec3d,
-    altitudeM: number,
-  ): { ray: Vec3d; distanceM: number } {
+  private rayFromGeoLocal(geoLocalM: Vec3d, altitudeM: number): { ray: Vec3d; distanceM: number } {
     const cameraRadiusM = altitudeM + EARTH_MEAN_RADIUS_M;
     const x = geoLocalM[0] - this.cameraDirLocal.x * cameraRadiusM;
     const y = geoLocalM[1] - this.cameraDirLocal.y * cameraRadiusM;
@@ -638,8 +633,7 @@ export class SpaceRenderer {
               : Math.hypot(body.helioEqjM[0], body.helioEqjM[1], body.helioEqjM[2]),
         illuminatedFraction: body.illuminatedFraction,
         // The lit limb faces the Sun's side of the sky.
-        litOnRight:
-          ((sky.sun.azimuthDeg - body.azimuthDeg + 540) % 360) - 180 > 0,
+        litOnRight: ((sky.sun.azimuthDeg - body.azimuthDeg + 540) % 360) - 180 > 0,
       })),
     });
   }
@@ -676,7 +670,10 @@ export class SpaceRenderer {
     // In the map view the camera is glued straight down over the dot: any
     // leftover free-look (the opening target, an old drag) unwinds here so
     // the pull-out never swivels off toward the horizon it used to face.
-    if (this.pointerId === null && nadirBlendForAltitude(Math.exp(this.distanceSpring.value)) > 0.5) {
+    if (
+      this.pointerId === null &&
+      nadirBlendForAltitude(Math.exp(this.distanceSpring.value)) > 0.5
+    ) {
       const mapDecay = Math.exp(-2.4 * Math.min(0.25, Math.max(0, rawDeltaSeconds)));
       this.yawOffset *= mapDecay;
       this.pitchOffset *= mapDecay;
@@ -1068,12 +1065,15 @@ export class SpaceRenderer {
     // transparent while systemReveal is 0, so the gate itself is invisible.
     const plutoAphelionM = 7.38e12;
     const orbitFarUnits = plutoAphelionM * renderUnitsPerMeter * 1.15;
+    // Altitude-riding near plane: the standard depth buffer cannot carry a
+    // fixed tiny near up the journey (see nearPlaneRenderUnitsForAltitude).
+    const nearFloorUnits = nearPlaneRenderUnitsForAltitude(altitudeM);
     if (systemReveal > 0.001 && orbitFarUnits > 50_000) {
       this.camera.far = orbitFarUnits;
-      this.camera.near = 0.00001 * (orbitFarUnits / 50_000);
+      this.camera.near = Math.max(0.00001 * (orbitFarUnits / 50_000), nearFloorUnits);
     } else {
       this.camera.far = 50_000;
-      this.camera.near = 0.00001;
+      this.camera.near = nearFloorUnits;
     }
     this.camera.updateProjectionMatrix();
 
@@ -1155,6 +1155,21 @@ export class SpaceRenderer {
         apparentRadiusDeg: apparentRadiusDeg(EARTH_MEAN_RADIUS_M, altitudeM + EARTH_MEAN_RADIUS_M),
       });
     }
+    // In space the band passes behind the globe; captions on the Earth's
+    // apparent disc hide with it instead of floating over the planet.
+    const earthDistanceRender = earthCenterRender.length() || 1;
+    const captionOccluder =
+      revealBlend > 0.01
+        ? {
+            direction: [
+              earthCenterRender.x / earthDistanceRender,
+              earthCenterRender.y / earthDistanceRender,
+              earthCenterRender.z / earthDistanceRender,
+            ] as const,
+            apparentRadiusDeg:
+              (Math.asin(EARTH_MEAN_RADIUS_M / (EARTH_MEAN_RADIUS_M + altitudeM)) * 180) / Math.PI,
+          }
+        : undefined;
     this.overlay?.update(
       this.camera,
       headingDeg,
@@ -1167,11 +1182,13 @@ export class SpaceRenderer {
       },
       {
         anchors: this.planeGuideAnchors,
-        // The caption is an orientation aid for the ground and atmosphere;
-        // beyond that the band and orbit geometry speak for themselves.
+        // The caption rides the band: on the ground view, gone with the band
+        // over the map/satellite leg, back with the reveal in outer space,
+        // and it retires when the orbit geometry takes over the story.
         opacity: layers["ecliptic-rings"]
-          ? 0.55 * (1 - smoothstep(100_000, 300_000, altitudeM))
+          ? 0.55 * (1 - smoothstep(15, 55, altitudeM)) + 0.7 * revealBlend * (1 - systemReveal)
           : 0,
+        occluder: captionOccluder,
       },
     );
     this.framesSinceTelemetry += 1;

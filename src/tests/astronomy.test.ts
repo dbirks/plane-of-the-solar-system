@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import { marsSeasonLabel, marsSolarLongitudeDeg } from "../astronomy/mars-season";
 import { computeEclipticRingEqjM, eclipticNorthEqj } from "../astronomy/planet-orbits";
-import { altAzToLocalThree, computeSkyState, computeSunHorizonEvents } from "../astronomy/sky-state";
+import {
+  altAzToLocalThree,
+  computeSkyState,
+  computeSunHorizonEvents,
+} from "../astronomy/sky-state";
 import type { Vec3d } from "../coordinates/vec3d";
 import {
   referenceMoonAltAz,
@@ -184,11 +188,7 @@ describe("computeSkyState against independent Meeus reference (frames: HOR geome
 
 describe("computeSunHorizonEvents (azimuth degrees, north→east)", () => {
   it("puts July sunset in the northwest and sunrise in the northeast at mid-northern latitude", () => {
-    const events = computeSunHorizonEvents(
-      Date.parse("2026-07-24T02:30:00Z"),
-      39.7684,
-      -86.1581,
-    );
+    const events = computeSunHorizonEvents(Date.parse("2026-07-24T02:30:00Z"), 39.7684, -86.1581);
     expect(events).not.toBeNull();
     // Summer sun sets north of due west and rises north of due east.
     expect(events!.setAzimuthDeg).toBeGreaterThan(280);

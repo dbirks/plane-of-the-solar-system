@@ -21,6 +21,7 @@ import {
 import * as THREE from "three/webgpu";
 
 import type { MoonPlacement } from "../../astronomy/moon-placement";
+import { revealBlendForAltitude } from "../../camera/camera-compositions";
 import { computeEclipticRingEqjM, eclipticNorthEqj } from "../../astronomy/planet-orbits";
 import type { Vec3d } from "../../coordinates/vec3d";
 import {
@@ -298,7 +299,10 @@ export class SkyLayer {
     // WebGPU-flavored renderer has no dependable dashed-line material.
     const dashSampleCount = 720;
     const dashDirections = computeEclipticRingEqjM(1, dashSampleCount);
-    const dashPaths = [new Float32Array(dashSampleCount * 3), new Float32Array(dashSampleCount * 3)];
+    const dashPaths = [
+      new Float32Array(dashSampleCount * 3),
+      new Float32Array(dashSampleCount * 3),
+    ];
     for (let i = 0; i < dashSampleCount; i += 1) {
       const x = dashDirections[i * 3]!;
       const y = dashDirections[i * 3 + 1]!;
@@ -407,10 +411,7 @@ export class SkyLayer {
     // actual horizon and tilt with it as the view moves.
     const glowQuad = (core: string, halo: string) => {
       const quad = new THREE.Mesh(
-        new THREE.PlaneGeometry(
-          STAR_SHELL_RENDER_RADIUS * 0.42,
-          STAR_SHELL_RENDER_RADIUS * 0.15,
-        ),
+        new THREE.PlaneGeometry(STAR_SHELL_RENDER_RADIUS * 0.42, STAR_SHELL_RENDER_RADIUS * 0.15),
         new THREE.MeshBasicMaterial({
           map: buildHorizonGlowTexture(core, halo),
           transparent: true,
@@ -698,8 +699,14 @@ export class SkyLayer {
     // lines as the physical system fades in.
     // Daylight washes the band out against the bright sky and ground, so it
     // leans brighter while the Sun is up (night keeps the subtle look).
+    // Over the map/satellite leg the band leaves entirely — a sky ribbon
+    // sliced through the straight-down imagery — and returns with the reveal,
+    // where the depth test carries it cleanly BEHIND the globe.
     const daylightBoost = 1 + clamp01((sunAltitudeDeg + 2) / 8) * 1.2;
-    const bandOpacity = eclipticBandEnabled ? 0.14 * daylightBoost * (1 - systemReveal) : 0;
+    const mapLeg = smoothstepNumber(15, 55, altitudeM) * (1 - revealBlendForAltitude(altitudeM));
+    const bandOpacity = eclipticBandEnabled
+      ? 0.14 * daylightBoost * (1 - systemReveal) * (1 - mapLeg)
+      : 0;
     this.eclipticBand.visible = bandOpacity > 0.003;
     (this.eclipticBand.material as THREE.LineBasicMaterial).opacity = bandOpacity;
     this.eclipticBandFill.visible = bandOpacity > 0.003;
@@ -708,7 +715,9 @@ export class SkyLayer {
     // it hands off as the ground itself fades from view. Clearly brighter
     // than the band fill so the loop-around actually reads, day or night.
     const belowOpacity =
-      bandOpacity <= 0 ? 0 : Math.max(0.42, Math.min(1, bandOpacity * 2.4)) * groundFade;
+      bandOpacity <= 0
+        ? 0
+        : Math.max(0.42, Math.min(1, bandOpacity * 2.4)) * groundFade * (1 - mapLeg);
     this.eclipticBandBelow.visible = belowOpacity > 0.003;
     (this.eclipticBandBelow.material as THREE.LineBasicMaterial).opacity = belowOpacity;
     const groundStarOpacity = clamp01((-sunAltitudeDeg - 3) / 11);

@@ -189,8 +189,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 >
                   Esri
                 </a>
-                , Maxar, Earthstar Geographics — tiles for your area are fetched and cached on
-                your device
+                , Maxar, Earthstar Geographics — tiles for your area are fetched and cached on your
+                device
               </li>
             </ul>
           </section>

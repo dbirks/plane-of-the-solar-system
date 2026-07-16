@@ -13,7 +13,8 @@ import * as THREE from "three/webgpu";
  * (~20–60 m up) and hands off to the Blue Marble globe on the way out.
  */
 
-const TILE_SOURCE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile";
+const TILE_SOURCE =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile";
 export const TILE_ATTRIBUTION = "Imagery © Esri, Maxar, Earthstar Geographics";
 const TILE_CACHE = "satellite-tiles-v1";
 const TILES_PER_SIDE = 4;
@@ -103,6 +104,10 @@ export class SatellitePatches {
         transparent: true,
         opacity: 0,
         depthWrite: false,
+        // No depth test either: flat quads lifted meters over a spherical
+        // terrain z-fight along the curvature (frame-to-frame "spazzing").
+        // renderOrder alone layers them — over the ground, under the marker.
+        depthTest: false,
       });
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
       mesh.rotation.x = -Math.PI / 2;
@@ -119,8 +124,7 @@ export class SatellitePatches {
       const tileY0 = Math.floor(origin.y) - TILES_PER_SIDE / 2 + 1;
       const west = tileBounds(tileX0, tileY0, level.zoom);
       const east = tileBounds(tileX0 + TILES_PER_SIDE - 1, tileY0 + TILES_PER_SIDE - 1, level.zoom);
-      const metersPerDegLon =
-        METERS_PER_DEG_LAT * Math.cos((observerLatitudeDeg * Math.PI) / 180);
+      const metersPerDegLon = METERS_PER_DEG_LAT * Math.cos((observerLatitudeDeg * Math.PI) / 180);
       const widthM = (east.eastDeg - west.westDeg) * metersPerDegLon;
       const heightM = (west.northDeg - east.southDeg) * METERS_PER_DEG_LAT;
       const centerEastM =

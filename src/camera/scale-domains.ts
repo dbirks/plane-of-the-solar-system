@@ -118,3 +118,21 @@ export function earthRenderRadiusForAltitude(altitudeM: number): number {
 export function renderUnitsPerMeterForAltitude(altitudeM: number): number {
   return earthRenderRadiusForAltitude(altitudeM) / EARTH_MEAN_RADIUS_M;
 }
+
+/**
+ * Camera near plane in render units. The standard depth buffer (the app
+ * default — reversed depth never rasterizes the imagery quads, ADR-0018)
+ * quantizes on far/near, so a fixed tiny near breaks down as the camera
+ * climbs: at whole Earth the depth step exceeded the globe itself and every
+ * surface z-fought every other. Nothing renderable sits closer than a good
+ * fraction of the altitude (the nearest content IS the ground/globe at
+ * altitude away; worst case is the Moon at the Earth–Moon leg, still beyond
+ * 0.15×), so the near plane rides the altitude — capped under the camera-
+ * anchored sky shell (bodies at 1300, stars at 1500).
+ */
+export function nearPlaneRenderUnitsForAltitude(altitudeM: number): number {
+  return Math.min(
+    900,
+    Math.max(0.00001, altitudeM * renderUnitsPerMeterForAltitude(altitudeM) * 0.15),
+  );
+}

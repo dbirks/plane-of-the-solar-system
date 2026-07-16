@@ -144,8 +144,8 @@ export function ObserverChip({ observer }: { observer: ObserverLocation }) {
           </div>
           {geoStatus && <p className="location-status">{geoStatus}</p>}
           <p className="location-privacy">
-            Your location stays in this browser, only to orient the sky and fetch close-up
-            imagery of your area from the map provider.
+            Your location stays in this browser, only to orient the sky and fetch close-up imagery
+            of your area from the map provider.
           </p>
         </aside>
       )}

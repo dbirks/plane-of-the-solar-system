@@ -25,10 +25,28 @@ function traceHemisphere(
   context.beginPath();
   if (onRight) {
     context.arc(center, center, radius, -Math.PI / 2, Math.PI / 2, false);
-    context.ellipse(center, center, minorAxis, radius, 0, Math.PI / 2, -Math.PI / 2, counterclockwise);
+    context.ellipse(
+      center,
+      center,
+      minorAxis,
+      radius,
+      0,
+      Math.PI / 2,
+      -Math.PI / 2,
+      counterclockwise,
+    );
   } else {
     context.arc(center, center, radius, Math.PI / 2, -Math.PI / 2, false);
-    context.ellipse(center, center, minorAxis, radius, 0, -Math.PI / 2, Math.PI / 2, counterclockwise);
+    context.ellipse(
+      center,
+      center,
+      minorAxis,
+      radius,
+      0,
+      -Math.PI / 2,
+      Math.PI / 2,
+      counterclockwise,
+    );
   }
   context.closePath();
 }

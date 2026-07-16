@@ -123,7 +123,9 @@ test("location panel offers manual and device location without any opening promp
   await expect(page.getByText(/Your location stays in this browser/)).toBeVisible();
 
   // The open panel must fit the viewport, phones included.
-  const panelBox = await page.getByRole("complementary", { name: "Observer location" }).boundingBox();
+  const panelBox = await page
+    .getByRole("complementary", { name: "Observer location" })
+    .boundingBox();
   const viewport = page.viewportSize();
   expect(panelBox).not.toBeNull();
   expect(panelBox!.x).toBeGreaterThanOrEqual(0);

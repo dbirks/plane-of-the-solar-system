@@ -52,6 +52,16 @@ export type PlaneGuideAnchor = {
   directionAhead: readonly [number, number, number];
 };
 
+export type PlaneGuides = {
+  anchors: readonly PlaneGuideAnchor[];
+  opacity: number;
+  /** In space the band passes behind the globe — captions whose anchor falls
+   * on the Earth's apparent disc hide rather than float over the planet. */
+  occluder?:
+    | { direction: readonly [number, number, number]; apparentRadiusDeg: number }
+    | undefined;
+};
+
 export class SkyOverlay {
   private readonly root: HTMLElement;
   private readonly layer: HTMLDivElement;
@@ -135,7 +145,7 @@ export class SkyOverlay {
     overrides?: Map<string, MoonMarkerOverride>,
     systemReveal = 0,
     prefs: { labels: boolean; belowHorizon: boolean } = { labels: true, belowHorizon: true },
-    planeGuides?: { anchors: readonly PlaneGuideAnchor[]; opacity: number },
+    planeGuides?: PlaneGuides,
   ): void {
     const proxyOpacity =
       1 - smoothstepNumber(PROXY_FADE_START_ALTITUDE_M, PROXY_FADE_END_ALTITUDE_M, altitudeM);
@@ -230,8 +240,7 @@ export class SkyOverlay {
         // Arrow markers read best with the label ON TOP of the arrow (it
         // points down at the body below); sky circles and ghosts keep the
         // label underneath. Both flip near their clipping screen edge.
-        const labelAbove =
-          skyCircle || ghosted2 ? screenY > height - 64 : screenY >= 80;
+        const labelAbove = skyCircle || ghosted2 ? screenY > height - 64 : screenY >= 80;
         entry.element.classList.toggle("sky-marker--label-above", labelAbove);
         entry.screenX = screenX;
         entry.screenY = screenY;
@@ -313,7 +322,7 @@ export class SkyOverlay {
     camera: THREE.PerspectiveCamera,
     width: number,
     height: number,
-    planeGuides?: { anchors: readonly PlaneGuideAnchor[]; opacity: number },
+    planeGuides?: PlaneGuides,
   ): void {
     const anchors = planeGuides?.anchors ?? [];
     while (this.planeCaptions.length < anchors.length) {
@@ -331,6 +340,18 @@ export class SkyOverlay {
       if (!anchor || opacity <= 0.02 || width <= 0 || height <= 0) {
         caption.style.display = "none";
         continue;
+      }
+      const occluder = planeGuides?.occluder;
+      if (occluder) {
+        const facing =
+          anchor.direction[0] * occluder.direction[0] +
+          anchor.direction[1] * occluder.direction[1] +
+          anchor.direction[2] * occluder.direction[2];
+        const separationDeg = (Math.acos(Math.min(1, Math.max(-1, facing))) * 180) / Math.PI;
+        if (separationDeg < occluder.apparentRadiusDeg + 6) {
+          caption.style.display = "none";
+          continue;
+        }
       }
       this.workVector.set(...anchor.direction).applyMatrix4(camera.matrixWorldInverse);
       this.workVectorAhead.set(...anchor.directionAhead).applyMatrix4(camera.matrixWorldInverse);
@@ -355,7 +376,8 @@ export class SkyOverlay {
       const aheadY = ((1 - this.workVectorAhead.y) / 2) * height;
       const slopeDeg = (Math.atan2(aheadY - screenY, aheadX - screenX) * 180) / Math.PI;
       // Keep the text upright: flip when the band runs right-to-left.
-      const uprightDeg = slopeDeg > 90 ? slopeDeg - 180 : slopeDeg < -90 ? slopeDeg + 180 : slopeDeg;
+      const uprightDeg =
+        slopeDeg > 90 ? slopeDeg - 180 : slopeDeg < -90 ? slopeDeg + 180 : slopeDeg;
       // Below the horizon the caption rides the dotted continuation, dimmed
       // to match it.
       const belowHorizonDim = anchor.direction[1] < 0 ? 0.7 : 1;

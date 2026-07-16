@@ -31,7 +31,7 @@ on one limb; cardinal directions kept sliding at planetary scales.
 2. **The band was right.** Unit tests now pin the sky-shell ecliptic band to
    astronomy-engine: over Indianapolis on a July evening it tops out near
    30° (January evening: ~71°), and the Sun sits on the band at every fixed
-   epoch. Summer *nights* genuinely have a low ecliptic — the "wintertime"
+   epoch. Summer _nights_ genuinely have a low ecliptic — the "wintertime"
    look is the sky, not a bug.
 3. **Glows keep time.** `SunHorizonEvents` carries event times; each glow is
    gated by its own window (sunset: ~30 min before to ~60 min after; sunrise

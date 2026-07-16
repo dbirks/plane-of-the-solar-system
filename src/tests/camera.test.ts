@@ -16,6 +16,8 @@ import {
   applySoftLandmarkAttraction,
   distanceToSlider,
   JOURNEY_LANDMARKS,
+  nearPlaneRenderUnitsForAltitude,
+  renderUnitsPerMeterForAltitude,
   sliderToDistance,
 } from "../camera/scale-domains";
 
@@ -118,7 +120,8 @@ describe("whole-Earth composition", () => {
     // plane a near-flat line rather than a disc seen from above.
     expect(OBSERVER_SWING_RAD).toBeGreaterThan(0.6);
     expect(OBSERVER_SWING_RAD).toBeLessThan(1.0);
-    const elevationDeg = (Math.asin(REVEAL_NORTH_LIFT / Math.hypot(1, REVEAL_NORTH_LIFT)) * 180) / Math.PI;
+    const elevationDeg =
+      (Math.asin(REVEAL_NORTH_LIFT / Math.hypot(1, REVEAL_NORTH_LIFT)) * 180) / Math.PI;
     expect(elevationDeg).toBeGreaterThan(4);
     expect(elevationDeg).toBeLessThan(15);
   });
@@ -144,6 +147,28 @@ describe("whole-Earth composition", () => {
     const atFullSystem = systemCompositionForAltitude(8_000_000_000_000, 46);
     expect(atFullSystem.blend).toBe(1);
     expect(atFullSystem.fovDeg).toBe(78);
+  });
+});
+
+describe("near plane vs. depth precision", () => {
+  it("rides the altitude so standard depth keeps sub-percent steps at scale", () => {
+    // A 24-bit standard depth buffer quantizes roughly by z²/(near · 2^24):
+    // at every journey altitude the step at the Earth-surface distance must
+    // stay far below the atmosphere shell gap (2.5% of the render radius),
+    // or the shells and the globe z-fight into flashing splotches.
+    for (const altitudeM of [50, 71_000, 7_700_000, 500_000_000, 4e11]) {
+      const near = nearPlaneRenderUnitsForAltitude(altitudeM);
+      const surfaceZ = altitudeM * renderUnitsPerMeterForAltitude(altitudeM);
+      const depthStep = (surfaceZ * surfaceZ) / (near * 2 ** 24);
+      expect(depthStep).toBeLessThan(surfaceZ * 0.002);
+      // And the near plane itself never clips the content below the camera.
+      expect(near).toBeLessThanOrEqual(surfaceZ);
+    }
+  });
+
+  it("never reaches the camera-anchored sky shell", () => {
+    expect(nearPlaneRenderUnitsForAltitude(12_000_000_000_000)).toBeLessThan(1_300);
+    expect(nearPlaneRenderUnitsForAltitude(2)).toBeGreaterThanOrEqual(0.00001);
   });
 });
 

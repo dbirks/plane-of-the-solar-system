@@ -30,17 +30,21 @@ describe("headingFromOrientationEvent (output: degrees clockwise from north)", (
 describe("lookFromOrientationEvent (through-the-screen gaze)", () => {
   it("reads the pitch from beta/gamma independent of heading", () => {
     // Flat on a table, screen up: the camera looks straight down.
-    expect(lookFromOrientationEvent({ alpha: 0, beta: 0, gamma: 0, absolute: true })?.pitchDeg)
-      .toBeCloseTo(-90, 6);
+    expect(
+      lookFromOrientationEvent({ alpha: 0, beta: 0, gamma: 0, absolute: true })?.pitchDeg,
+    ).toBeCloseTo(-90, 6);
     // Held upright in portrait: looking at the horizon.
-    expect(lookFromOrientationEvent({ alpha: 0, beta: 90, gamma: 0, absolute: true })?.pitchDeg)
-      .toBeCloseTo(0, 6);
+    expect(
+      lookFromOrientationEvent({ alpha: 0, beta: 90, gamma: 0, absolute: true })?.pitchDeg,
+    ).toBeCloseTo(0, 6);
     // Tipped 45° past upright: looking 45° up into the sky.
-    expect(lookFromOrientationEvent({ alpha: 0, beta: 135, gamma: 0, absolute: true })?.pitchDeg)
-      .toBeCloseTo(45, 6);
+    expect(
+      lookFromOrientationEvent({ alpha: 0, beta: 135, gamma: 0, absolute: true })?.pitchDeg,
+    ).toBeCloseTo(45, 6);
     // On its side (landscape), still level with the horizon.
-    expect(lookFromOrientationEvent({ alpha: 0, beta: 0, gamma: 90, absolute: true })?.pitchDeg)
-      .toBeCloseTo(0, 6);
+    expect(
+      lookFromOrientationEvent({ alpha: 0, beta: 0, gamma: 90, absolute: true })?.pitchDeg,
+    ).toBeCloseTo(0, 6);
   });
 
   it("keeps the heading conventions of headingFromOrientationEvent", () => {
@@ -104,8 +108,7 @@ describe("attitudeQuaternionFromEvent (camera quaternion, local frame: x east, y
       const q = attitudeQuaternionFromEvent({ alpha: 30, beta, gamma: 0 }, 0)!;
       const gaze = gazeOf(q);
       if (previous) {
-        const dot =
-          gaze[0] * previous[0] + gaze[1] * previous[1] + gaze[2] * previous[2];
+        const dot = gaze[0] * previous[0] + gaze[1] * previous[1] + gaze[2] * previous[2];
         const stepDeg = (Math.acos(Math.min(1, Math.max(-1, dot))) * 180) / Math.PI;
         expect(stepDeg).toBeLessThan(4);
       }

@@ -56,7 +56,10 @@ export function computePlanetOrbitEqjM(
  * Earth's own year around the Sun, sampled like the planet orbits — the
  * observer's path through the solar system.
  */
-export function computeEarthOrbitEqjM(utcMs: number, sampleCount = ORBIT_SAMPLE_COUNT): Float32Array {
+export function computeEarthOrbitEqjM(
+  utcMs: number,
+  sampleCount = ORBIT_SAMPLE_COUNT,
+): Float32Array {
   const periodMs = PlanetOrbitalPeriod(Body.Earth) * 86_400_000;
   const points = new Float32Array(sampleCount * 3);
   for (let i = 0; i < sampleCount; i += 1) {

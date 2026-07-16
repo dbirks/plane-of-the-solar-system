@@ -733,7 +733,9 @@ input:focus-visible {
   border: 1px solid rgb(180 225 228 / 0.28);
   border-radius: 999px;
   background: rgb(10 24 32 / 0.9);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .switch-knob {
@@ -744,7 +746,9 @@ input:focus-visible {
   height: 16px;
   border-radius: 999px;
   background: #8aa3a6;
-  transition: transform 0.15s ease, background 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
 }
 
 .switch-input:checked + .switch-track {
@@ -1219,4 +1223,3 @@ input:focus-visible {
 .sky-marker--nolabel .sky-marker-label {
   display: none;
 }
-
