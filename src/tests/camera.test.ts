@@ -90,22 +90,22 @@ describe("whole-Earth composition", () => {
     expect(journeyCompositionForSlider(1)).toBe(1);
   });
 
-  it("holds the map view to ~200 km, then banks into the ball by ~2000 km", () => {
+  it("holds the map view to ~2000 km, then banks into the ball by whole Earth", () => {
     expect(revealBlendForAltitude(2)).toBe(0);
     // The whole map leg stays dead-centered on the observer's dot…
     expect(revealBlendForAltitude(1_000)).toBe(0);
     expect(revealBlendForAltitude(100_000)).toBe(0);
-    // …then the swing runs its band…
-    expect(revealBlendForAltitude(500_000)).toBeGreaterThan(0.2);
-    expect(revealBlendForAltitude(500_000)).toBeLessThan(0.8);
-    // …and is fully settled well before whole Earth: from there out the
-    // journey only zooms.
-    expect(revealBlendForAltitude(2_000_000)).toBe(1);
+    expect(revealBlendForAltitude(1_500_000)).toBe(0);
+    // …then the slow realign runs its late band…
+    expect(revealBlendForAltitude(5_000_000)).toBeGreaterThan(0.2);
+    expect(revealBlendForAltitude(5_000_000)).toBeLessThan(0.9);
+    // …and settles by whole Earth: from there out the journey only zooms.
+    expect(revealBlendForAltitude(16_000_000)).toBe(1);
     expect(revealBlendForAltitude(20_000_000)).toBe(1);
     expect(revealBlendForAltitude(8_000_000_000_000)).toBe(1);
     // Monotonic through the whole band.
     let previous = 0;
-    for (let exponent = 5.3; exponent <= 6.3; exponent += 0.05) {
+    for (let exponent = 6.3; exponent <= 7.2; exponent += 0.05) {
       const value = revealBlendForAltitude(10 ** exponent);
       expect(value).toBeGreaterThanOrEqual(previous);
       previous = value;

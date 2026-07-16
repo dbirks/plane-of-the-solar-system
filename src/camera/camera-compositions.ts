@@ -104,14 +104,13 @@ export function nadirBlendForAltitude(altitudeM: number): number {
 }
 
 export function revealBlendForAltitude(altitudeM: number): number {
-  // The swing must wait until altitude makes it geometrically sane: below
-  // ~200 km the camera stays on the observer's zenith ray (the map view
-  // zooms out dead-centered on the dot); from 200 to ~2000 km the vantage
-  // banks around the planet into the tilted-ball frame. Any earlier and a
-  // "45° swing" walks the camera thousands of km from the dot while it is
-  // barely off the ground.
+  // The realign is a LATE, slow beat: the map view stays glued straight
+  // down over the observer's dot until ~2000 km out, then from there to
+  // ~16,000 km (finishing right at whole Earth) the vantage banks around
+  // the planet, the plane settles dead level, and the tilt shows. Any
+  // earlier and the swing visibly drags the view off the dot.
   const logAltitude = Math.log10(Math.max(1, altitudeM));
-  const t = Math.min(1, Math.max(0, (logAltitude - 5.3) / (6.3 - 5.3)));
+  const t = Math.min(1, Math.max(0, (logAltitude - 6.3) / (7.2 - 6.3)));
   return t * t * (3 - 2 * t);
 }
 

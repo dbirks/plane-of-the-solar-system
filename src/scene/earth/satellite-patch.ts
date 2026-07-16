@@ -53,18 +53,23 @@ export function tileBounds(tileX: number, tileY: number, zoom: number) {
 
 async function fetchTile(zoom: number, x: number, y: number): Promise<ImageBitmap | null> {
   const url = `${TILE_SOURCE}/${zoom}/${y}/${x}`;
-  try {
-    const cache = "caches" in window ? await caches.open(TILE_CACHE) : null;
-    let response = (await cache?.match(url)) ?? null;
-    if (!response) {
-      response = await fetch(url, { mode: "cors" });
-      if (!response.ok) return null;
-      await cache?.put(url, response.clone());
+  // Bursts of 64 tiles can hit provider throttling and spotty mobile
+  // networks — retry a few times with backoff before giving up.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const cache = "caches" in window ? await caches.open(TILE_CACHE) : null;
+      let response = (await cache?.match(url)) ?? null;
+      if (!response) {
+        response = await fetch(url, { mode: "cors" });
+        if (!response.ok) throw new Error(`tile ${response.status}`);
+        await cache?.put(url, response.clone());
+      }
+      return await createImageBitmap(await response.blob());
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
     }
-    return await createImageBitmap(await response.blob());
-  } catch {
-    return null;
   }
+  return null;
 }
 
 type Patch = {
@@ -149,6 +154,11 @@ export class SatellitePatches {
   ): Promise<void> {
     const context = canvas.getContext("2d");
     if (!context) return;
+    // Neutral ground tone beneath the tiles: a failed tile becomes a muted
+    // square, never a transparent-black hole.
+    context.fillStyle = "#2c3a33";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    let landed = 0;
     const jobs: Promise<void>[] = [];
     for (let row = 0; row < TILES_PER_SIDE; row += 1) {
       for (let column = 0; column < TILES_PER_SIDE; column += 1) {
@@ -157,13 +167,20 @@ export class SatellitePatches {
             if (!bitmap || this.disposed) return;
             context.drawImage(bitmap, column * TILE_PX, row * TILE_PX);
             bitmap.close();
-            texture.needsUpdate = true;
-            patch.loaded = true;
+            landed += 1;
           }),
         );
       }
     }
     await Promise.allSettled(jobs);
+    if (this.disposed) return;
+    // Reveal the patch only once loading has SETTLED and most tiles are in —
+    // tile-by-tile pop-in read as flashing on-device, and the neutral fill
+    // keeps any stragglers as muted squares rather than holes.
+    if (landed >= (TILES_PER_SIDE * TILES_PER_SIDE) / 2) {
+      texture.needsUpdate = true;
+      patch.loaded = true;
+    }
   }
 
   /**
@@ -179,7 +196,12 @@ export class SatellitePatches {
     const fadeOut = 1 - smoothstep(300_000, 1_200_000, altitudeM);
     const groupOpacity = fadeIn * fadeOut;
     for (const patch of this.patches) {
-      const levelFade = 1 - smoothstep(patch.maxAltitudeM * 0.6, patch.maxAltitudeM, altitudeM);
+      // Long overlap between levels: the coarser patch is already fully
+      // present underneath before the finer one thins out. The widest level
+      // has no ceiling (Infinity would NaN the smoothstep — it never drew).
+      const levelFade = Number.isFinite(patch.maxAltitudeM)
+        ? 1 - smoothstep(patch.maxAltitudeM * 0.35, patch.maxAltitudeM, altitudeM)
+        : 1;
       const opacity = groupOpacity * levelFade;
       patch.mesh.visible = patch.loaded && opacity > 0.01;
       patch.material.opacity = opacity;

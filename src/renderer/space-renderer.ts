@@ -673,6 +673,14 @@ export class SpaceRenderer {
         this.guidanceRequested = false;
       }
     }
+    // In the map view the camera is glued straight down over the dot: any
+    // leftover free-look (the opening target, an old drag) unwinds here so
+    // the pull-out never swivels off toward the horizon it used to face.
+    if (this.pointerId === null && nadirBlendForAltitude(Math.exp(this.distanceSpring.value)) > 0.5) {
+      const mapDecay = Math.exp(-2.4 * Math.min(0.25, Math.max(0, rawDeltaSeconds)));
+      this.yawOffset *= mapDecay;
+      this.pitchOffset *= mapDecay;
+    }
     const springFrequency = appState.reducedMotion ? 3.2 : 1.9;
     this.distanceSpring = stepCriticalSpring(
       this.distanceSpring,
@@ -809,7 +817,12 @@ export class SpaceRenderer {
       Math.min(0.002, markerDistanceRender * 0.02),
       markerDistanceRender * 0.006,
     );
+    // Sit clearly ABOVE the imagery quads (they float up to ~10 m over the
+    // ground): with the sphere half-buried, transparent sort order against
+    // the quads flipped frame to frame and the dot flashed while zooming.
     this.objects.observerMarker.position.copy(observerSurfaceRender);
+    this.objects.observerMarker.position.y += 15 * renderUnitsPerMeter;
+    this.objects.observerMarker.renderOrder = 2.5;
     this.objects.observerMarker.scale.setScalar(markerSize);
     this.objects.observerMarker.visible = markerReveal > 0.001;
     for (const mesh of [this.objects.observerMarker, ...this.objects.observerMarker.children]) {
