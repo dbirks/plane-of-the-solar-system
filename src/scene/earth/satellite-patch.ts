@@ -103,6 +103,9 @@ export class SatellitePatches {
       mesh.rotation.x = -Math.PI / 2;
       // Sharper levels draw over coarser ones.
       mesh.renderOrder = 1 + level.zoom / 20;
+      // Like every scaled object in this scene: culling misjudges the
+      // per-frame rescaled bounds (and the reversed depth projection).
+      mesh.frustumCulled = false;
       mesh.visible = false;
       this.group.add(mesh);
 

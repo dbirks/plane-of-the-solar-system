@@ -56,7 +56,12 @@ export function readFeatureFlags(
   const params = new URLSearchParams(search);
   const renderer = params.get("renderer") === "webgl" ? "webgl" : "auto";
   const depthValue = params.get("depth");
-  const depth = depthValue === "log" || depthValue === "standard" ? depthValue : "reversed";
+  // Standard is the default: it is the path every e2e scenario and live
+  // acceptance has always run, and the reversed depth buffer on the WebGL
+  // backend fails to draw the satellite-imagery quads (three.js issue —
+  // ADR-0018). Reversed and log remain reachable by flag; the per-frame
+  // near/far scaling keeps precision across the whole journey.
+  const depth = depthValue === "log" || depthValue === "reversed" ? depthValue : "standard";
   const qualityValue = params.get("quality");
   const quality = qualityValue === "low" || qualityValue === "high" ? qualityValue : "auto";
   const timeParam = params.get("time");

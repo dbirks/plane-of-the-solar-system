@@ -208,11 +208,17 @@ function createSceneObjects(
   // (back-face shell, so the rim reads as an outline around the dot).
   const observerMarker = new THREE.Mesh(
     new THREE.SphereGeometry(1, 32, 16),
-    new THREE.MeshBasicMaterial({ color: 0x74b3ff }),
+    new THREE.MeshBasicMaterial({ color: 0x74b3ff, transparent: true, opacity: 0 }),
   );
   const observerMarkerRim = new THREE.Mesh(
     new THREE.SphereGeometry(1.5, 32, 16),
-    new THREE.MeshBasicMaterial({ color: 0x1d4e9e, side: THREE.BackSide, depthWrite: false }),
+    new THREE.MeshBasicMaterial({
+      color: 0x1d4e9e,
+      side: THREE.BackSide,
+      depthWrite: false,
+      transparent: true,
+      opacity: 0,
+    }),
   );
   observerMarker.add(observerMarkerRim);
 
@@ -340,10 +346,17 @@ export class SpaceRenderer {
     this.scene.add(this.earthGuides);
     this.axisStubs = createAxisStubs(this.flags.latitudeDeg, this.flags.longitudeDeg);
     this.scene.add(this.axisStubs);
-    // Close-up satellite imagery around the observer, precached immediately
-    // so the first pull-out already has its map.
-    this.satellitePatches = new SatellitePatches(this.flags.latitudeDeg, this.flags.longitudeDeg);
-    this.scene.add(this.satellitePatches.group);
+    // Close-up satellite imagery around the observer. Precached shortly
+    // AFTER startup: 64 parallel tile fetches during renderer init starve
+    // the first frames on phones, and the imagery only matters above 15 m.
+    window.setTimeout(() => {
+      if (this.disposed || !this.scene) return;
+      this.satellitePatches = new SatellitePatches(
+        this.flags.latitudeDeg,
+        this.flags.longitudeDeg,
+      );
+      this.scene.add(this.satellitePatches.group);
+    }, 2_500);
 
     // Real Earth imagery loads after the opening scene; the flat-shaded globe
     // stands in until then and remains the fallback if loading fails.
@@ -790,7 +803,12 @@ export class SpaceRenderer {
     const markerReveal =
       smoothstep(250, 4_000, altitudeM) * (1 - smoothstep(1.2e8, 4e8, altitudeM));
     const markerDistanceRender = observerSurfaceRender.length();
-    const markerSize = Math.max(0.002, markerDistanceRender * 0.006);
+    // Fixed floor capped ANGULARLY: at map altitudes an absolute floor made
+    // the dot (and its dark rim) a huge disc over the imagery.
+    const markerSize = Math.max(
+      Math.min(0.002, markerDistanceRender * 0.02),
+      markerDistanceRender * 0.006,
+    );
     this.objects.observerMarker.position.copy(observerSurfaceRender);
     this.objects.observerMarker.scale.setScalar(markerSize);
     this.objects.observerMarker.visible = markerReveal > 0.001;

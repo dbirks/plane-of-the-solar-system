@@ -60,6 +60,15 @@ the unimaged black south.
    retilt. Inset blurbs removed, × enlarged, and Pluto's disc samples only
    the imaged band around the heart.
 
+7. **Default depth mode flips to standard.** Under `reversedDepthBuffer` on
+   the WebGL backend the imagery quads never rasterize (isolated by A/B on
+   the same build; standard renders them perfectly; not culling, not depth
+   test — a three.js backend issue to be reported upstream). Standard depth
+   is the path every e2e scenario and live acceptance has always run, and
+   the per-frame near/far scaling (ADR-0015's far-plane stretch) keeps
+   depth precision across the journey. `?depth=reversed` and `?depth=log`
+   remain reachable for comparison.
+
 ## Consequences
 
 - The journey: free look → map view by 60 m over street-sharp imagery →

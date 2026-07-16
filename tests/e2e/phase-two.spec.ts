@@ -53,8 +53,11 @@ test("sky markers exist for all bright bodies and ghost below the horizon", asyn
 test("compass strip slides when the view is dragged", async ({ page }) => {
   await page.goto(moonScenario);
   const strip = page.locator("#compass-strip");
+  // First frames are slow under CI's software rasterizer at the raised DPR.
   await expect
-    .poll(async () => strip.evaluate((element) => element.style.transform))
+    .poll(async () => strip.evaluate((element) => element.style.transform), {
+      timeout: 15_000,
+    })
     .toContain("translateX");
   const before = await strip.evaluate((element) => element.style.transform);
 
