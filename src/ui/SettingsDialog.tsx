@@ -180,6 +180,18 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 </a>{" "}
                 (CC BY 4.0), matched on-device
               </li>
+              <li>
+                Close-up imagery: ©{" "}
+                <a
+                  href="https://www.esri.com/en-us/arcgis/products/arcgis-online/overview"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Esri
+                </a>
+                , Maxar, Earthstar Geographics — tiles for your area are fetched and cached on
+                your device
+              </li>
             </ul>
           </section>
         </div>

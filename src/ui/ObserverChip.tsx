@@ -1,19 +1,12 @@
 import { useMemo, useState } from "react";
 
+import { navigateWithLocation, roundCoarse } from "../location/locate";
 import { nearestPlace } from "../location/nearest-place";
 import {
   clearSavedObserver,
   type ObserverLocation,
   saveObserver,
 } from "../location/observer-location";
-
-/** Reload with explicit lat/lon so the location stays a reproducible URL state. */
-function navigateWithLocation(latitudeDeg: number, longitudeDeg: number): void {
-  const params = new URLSearchParams(window.location.search);
-  params.set("lat", latitudeDeg.toFixed(4));
-  params.set("lon", longitudeDeg.toFixed(4));
-  window.location.search = params.toString();
-}
 
 const SOURCE_HINTS: Record<ObserverLocation["source"], string> = {
   url: "From the page address",
@@ -60,7 +53,11 @@ export function ObserverChip({ observer }: { observer: ObserverLocation }) {
     setGeoStatus("Asking the browser for your location…");
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        navigateWithLocation(position.coords.latitude, position.coords.longitude);
+        // Coarse on purpose: ~1 km is plenty to orient the sky.
+        navigateWithLocation(
+          roundCoarse(position.coords.latitude),
+          roundCoarse(position.coords.longitude),
+        );
       },
       (error) => {
         setGeoStatus(
@@ -69,7 +66,7 @@ export function ObserverChip({ observer }: { observer: ObserverLocation }) {
             : "Could not read a location from this device.",
         );
       },
-      { timeout: 10_000 },
+      { enableHighAccuracy: false, timeout: 10_000 },
     );
   };
 
@@ -147,7 +144,8 @@ export function ObserverChip({ observer }: { observer: ObserverLocation }) {
           </div>
           {geoStatus && <p className="location-status">{geoStatus}</p>}
           <p className="location-privacy">
-            Your location stays in this browser, only to orient the sky. Nothing is sent anywhere.
+            Your location stays in this browser, only to orient the sky and fetch close-up
+            imagery of your area from the map provider.
           </p>
         </aside>
       )}

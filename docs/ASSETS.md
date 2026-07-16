@@ -69,3 +69,11 @@ Both textures load asynchronously after the opening scene; the code-native flat-
 - **Processing:** resized to 1024×512, JPEG quality 78 via ImageMagick (60 KB)
 - **Output path:** `public/textures/planet-pluto-1024.jpg`
 - **Use:** the Pluto selection inset. The unimaged southern hemisphere (dark during the 2015 flyby) remains black — honest data, not a rendering bug.
+
+## Satellite imagery (round 10, runtime)
+
+- **Asset:** Esri World Imagery raster tiles (z18/15/12/9 around the observer)
+- **Source:** `server.arcgisonline.com/ArcGIS/rest/services/World_Imagery` (fetched at runtime, NOT bundled)
+- **Credit:** Imagery © Esri, Maxar, Earthstar Geographics — attributed on-screen while visible and in Settings credits
+- **Caching:** Cache API (`satellite-tiles-v1`), precached at startup for the observer's area (~64 tiles ≈ 2 MB), never re-downloaded
+- **Privacy:** the only runtime third-party fetch in the app, by explicit user decision (ADR-0018); the chip copy discloses it

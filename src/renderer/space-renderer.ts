@@ -23,6 +23,7 @@ import { formatDistanceParts } from "../camera/distance-format";
 import {
   earthMoonCompositionForAltitude,
   journeyCompositionForSlider,
+  nadirBlendForAltitude,
   OBSERVER_SWING_RAD,
   REVEAL_NORTH_LIFT,
   revealBlendForAltitude,
@@ -44,6 +45,7 @@ import {
 } from "../scene/earth/continent-outlines";
 import { createEarthGlobeMaterial, loadEarthTextures } from "../scene/earth/earth-globe";
 import { createAxisStubs, createEarthGuides } from "../scene/earth/earth-guides";
+import { SatellitePatches } from "../scene/earth/satellite-patch";
 import { buildGlowTexture, SkyLayer } from "../scene/sky/sky-layer";
 import { SolarSystemLayer } from "../scene/sky/solar-system-layer";
 import {
@@ -280,6 +282,8 @@ export class SpaceRenderer {
   private readoutLabelElement: HTMLElement | null = null;
   private earthGuides: THREE.LineSegments | null = null;
   private axisStubs: THREE.LineSegments | null = null;
+  private satellitePatches: SatellitePatches | null = null;
+  private imageryCreditElement: HTMLElement | null = null;
   private slowFrameStreak = 0;
   private adaptiveDprCap = Number.POSITIVE_INFINITY;
   private lastDprDropMs = 0;
@@ -336,6 +340,10 @@ export class SpaceRenderer {
     this.scene.add(this.earthGuides);
     this.axisStubs = createAxisStubs(this.flags.latitudeDeg, this.flags.longitudeDeg);
     this.scene.add(this.axisStubs);
+    // Close-up satellite imagery around the observer, precached immediately
+    // so the first pull-out already has its map.
+    this.satellitePatches = new SatellitePatches(this.flags.latitudeDeg, this.flags.longitudeDeg);
+    this.scene.add(this.satellitePatches.group);
 
     // Real Earth imagery loads after the opening scene; the flat-shaded globe
     // stands in until then and remains the fallback if loading fails.
@@ -380,6 +388,7 @@ export class SpaceRenderer {
     this.renderer?.setAnimationLoop(null);
     for (const cleanup of this.cleanupCallbacks) cleanup();
     this.overlay?.dispose();
+    this.satellitePatches?.dispose();
     this.renderer?.dispose();
   }
 
@@ -465,6 +474,9 @@ export class SpaceRenderer {
         return;
       }
       if (event.pointerId !== this.pointerId) return;
+      // While tilt navigation drives the camera, a stray finger must not
+      // fight it — dragging pauses (pinch travel above still works).
+      if (useAppStore.getState().phoneLookActive) return;
       const sensitivity = 0.004;
       this.yawOffset -= (event.clientX - this.lastPointer.x) * sensitivity;
       this.pitchOffset -= (event.clientY - this.lastPointer.y) * sensitivity;
@@ -519,8 +531,11 @@ export class SpaceRenderer {
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
     const mobile = width < 760;
+    // Hairline orbit lines get visibly pixelated when the frame renders
+    // under-resolution and upscales; the adaptive DPR governor still steps
+    // in under sustained slow frames, so the static caps can sit higher.
     const qualityCap =
-      this.flags.quality === "low" ? 1 : mobile ? 1.5 : this.flags.quality === "high" ? 2 : 1.75;
+      this.flags.quality === "low" ? 1 : mobile ? 2.25 : this.flags.quality === "high" ? 2.5 : 2;
     const pixelRatio = Math.min(window.devicePixelRatio, qualityCap, this.adaptiveDprCap);
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
@@ -753,6 +768,14 @@ export class SpaceRenderer {
     this.objects.coordinateGrid.position.set(0, 0, 0);
     this.objects.coordinateGrid.scale.setScalar(1_400);
 
+    // Satellite imagery under the map view; the credit line shows with it.
+    this.satellitePatches?.update(observerSurfaceRender, renderUnitsPerMeter, altitudeM);
+    this.imageryCreditElement ??= document.getElementById("imagery-credit");
+    if (this.imageryCreditElement) {
+      const imageryVisible = altitudeM > 15 && altitudeM < 1_200_000;
+      this.imageryCreditElement.style.visibility = imageryVisible ? "visible" : "hidden";
+    }
+
     const localFade = 1 - smoothstep(8_000, 90_000, altitudeM);
     const capRadiusM = Math.max(220_000, Math.sqrt(2 * EARTH_MEAN_RADIUS_M * altitudeM) * 1.5);
     this.objects.localCap.position.copy(observerSurfaceRender);
@@ -920,11 +943,25 @@ export class SpaceRenderer {
       baseYawRad,
     );
 
-    // The reveal frame: screen-up on ecliptic north (the plane of the solar
-    // system lies flat across the background) with Earth dead CENTER, tilted,
-    // the observer's dot on its side and the axis stubs reading the tilt —
-    // one slerp from the ground's free-look frame, so up-rolling and
-    // re-aiming arrive together with no nadir detour and no reversals.
+    // First beat: the map view. Almost immediately off the ground the gaze
+    // drops straight down onto where you stand, screen-up to the north —
+    // the aerial frame everyone knows.
+    const nadirBlend = nadirBlendForAltitude(altitudeM);
+    if (nadirBlend > 0.001) {
+      const nadirMatrix = new THREE.Matrix4().lookAt(
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, -1, 0),
+        new THREE.Vector3(0, 0, -1),
+      );
+      const nadirQuaternion = new THREE.Quaternion().setFromRotationMatrix(nadirMatrix);
+      baseQuaternion.slerp(nadirQuaternion, nadirBlend);
+    }
+
+    // Second beat, the reveal: the map slowly banks into the tilted ball —
+    // screen-up rolls onto ecliptic north (the plane lies flat across the
+    // background), Earth dead center with the observer's dot on its front
+    // face and the axis stubs reading the tilt. The gaze never returns to
+    // the horizon, so there is no mid-journey spin.
     if (revealBlend > 0.001) {
       const gazeTarget = this.cameraDirLocal.clone().multiplyScalar(-1);
       const lookMatrix = new THREE.Matrix4().lookAt(

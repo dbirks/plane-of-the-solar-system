@@ -117,7 +117,7 @@ test("location panel offers manual and device location without any opening promp
   await expect(page.getByLabel("Latitude in degrees")).toHaveValue("39.7684");
   await expect(page.getByLabel("Longitude in degrees")).toHaveValue("-86.1581");
   await expect(page.getByRole("button", { name: "Use my location" })).toBeVisible();
-  await expect(page.getByText(/Nothing is sent anywhere/)).toBeVisible();
+  await expect(page.getByText(/Your location stays in this browser/)).toBeVisible();
 
   // The open panel must fit the viewport, phones included.
   const panelBox = await page.getByRole("complementary", { name: "Observer location" }).boundingBox();

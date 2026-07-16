@@ -52,15 +52,18 @@ export function earthMoonCompositionForAltitude(
   gazeLocal: Vec3d,
   baseFovDeg: number,
 ): FramingWiden {
+  // A long, gentle band with the FOV capped at the system framing's 78°:
+  // the widening never outruns the zoom, so the pull-out reads as one
+  // continuous recession with no stall and no dolly-zoom "retilt".
   const logAltitude = Math.log10(Math.max(1, altitudeM));
-  const blendT = Math.min(1, Math.max(0, (logAltitude - 7.5) / (8.5 - 7.5)));
+  const blendT = Math.min(1, Math.max(0, (logAltitude - 7.4) / (8.7 - 7.4)));
   const blend = blendT * blendT * (3 - 2 * blendT);
 
   // Angle between the Earth-pinned gaze and the Moon's direction.
   const separationCos =
     moonRayLocal[0] * gazeLocal[0] + moonRayLocal[1] * gazeLocal[1] + moonRayLocal[2] * gazeLocal[2];
   const separationDeg = (Math.acos(Math.min(1, Math.max(-1, separationCos))) * 180) / Math.PI;
-  const fovDeg = Math.min(100, Math.max(baseFovDeg, separationDeg * 2.2 + 8));
+  const fovDeg = Math.min(78, Math.max(baseFovDeg, separationDeg * 2.2 + 8));
 
   return { blend, fovDeg };
 }
@@ -87,12 +90,28 @@ export function systemCompositionForAltitude(altitudeM: number, baseFovDeg: numb
  * observer's dot on its side. Fully settled well before whole Earth — from
  * there out, nothing re-aims; the frame only zooms.
  */
-export function revealBlendForAltitude(altitudeM: number): number {
-  // From ~300 m up (a thousand feet): the camera starts swinging around the
-  // planet almost as soon as the ground lets go, and the frame is fully
-  // settled by ~2000 km — the rest of the journey is pure zoom.
+/**
+ * The FIRST beat of the pull-out: as soon as the ground lets go (~15–60 m),
+ * the gaze drops to a straight-down map view centered on where you stand,
+ * screen-up to the north — the familiar aerial frame. The reveal then takes
+ * that map and slowly banks it into the tilted ball; the gaze never returns
+ * to the horizon, so there is no mid-journey spin.
+ */
+export function nadirBlendForAltitude(altitudeM: number): number {
   const logAltitude = Math.log10(Math.max(1, altitudeM));
-  const t = Math.min(1, Math.max(0, (logAltitude - 2.5) / (6.3 - 2.5)));
+  const t = Math.min(1, Math.max(0, (logAltitude - 1.2) / (1.8 - 1.2)));
+  return t * t * (3 - 2 * t);
+}
+
+export function revealBlendForAltitude(altitudeM: number): number {
+  // The swing must wait until altitude makes it geometrically sane: below
+  // ~200 km the camera stays on the observer's zenith ray (the map view
+  // zooms out dead-centered on the dot); from 200 to ~2000 km the vantage
+  // banks around the planet into the tilted-ball frame. Any earlier and a
+  // "45° swing" walks the camera thousands of km from the dot while it is
+  // barely off the ground.
+  const logAltitude = Math.log10(Math.max(1, altitudeM));
+  const t = Math.min(1, Math.max(0, (logAltitude - 5.3) / (6.3 - 5.3)));
   return t * t * (3 - 2 * t);
 }
 

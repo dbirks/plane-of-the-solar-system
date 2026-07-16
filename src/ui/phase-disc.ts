@@ -44,6 +44,11 @@ export type PhaseDiscOptions = {
   illuminatedFraction: number;
   /** Which limb the Sun lights. */
   litOnRight: boolean;
+  /**
+   * Optional source rectangle (fractions of the image) for maps with
+   * unusable regions — Pluto's unimaged southern hemisphere is black.
+   */
+  sourceRect?: { x: number; y: number; width: number; height: number } | undefined;
 };
 
 /** Draw the disc at device pixel ratio. Call again when the image loads. */
@@ -70,15 +75,19 @@ export function drawPhaseDisc(canvas: HTMLCanvasElement, options: PhaseDiscOptio
   context.clip();
   const image = options.image;
   if (image && image.complete && image.naturalWidth > 0) {
-    // Central square of the equirectangular map ≈ the facing hemisphere.
-    const sourceSize = image.naturalHeight;
-    const sourceX = (image.naturalWidth - sourceSize) / 2;
+    // Central square of the equirectangular map ≈ the facing hemisphere,
+    // unless the body supplies its own usable region.
+    const rect = options.sourceRect;
+    const sourceWidth = rect ? rect.width * image.naturalWidth : image.naturalHeight;
+    const sourceHeight = rect ? rect.height * image.naturalHeight : image.naturalHeight;
+    const sourceX = rect ? rect.x * image.naturalWidth : (image.naturalWidth - sourceWidth) / 2;
+    const sourceY = rect ? rect.y * image.naturalHeight : 0;
     context.drawImage(
       image,
       sourceX,
-      0,
-      sourceSize,
-      sourceSize,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
       center - radius,
       center - radius,
       radius * 2,

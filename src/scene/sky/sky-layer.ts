@@ -458,7 +458,9 @@ export class SkyLayer {
     let vertexCount = 0;
     for (const path of this.bandDashPaths) {
       const samples = path.length / 3;
-      for (let i = 0; i < samples; i += 2) {
+      for (let i = 0; i < samples; i += 1) {
+        // Two dashes on, one off: long enough to read as continuous lines.
+        if (i % 3 === 2) continue;
         const next = (i + 1) % samples;
         const ax = path[i * 3]!;
         const ay = path[i * 3 + 1]!;
@@ -468,7 +470,9 @@ export class SkyLayer {
         const bz = path[next * 3 + 2]!;
         const aBelow = ax * zenithObject.x + ay * zenithObject.y + az * zenithObject.z < 0;
         const bBelow = bx * zenithObject.x + by * zenithObject.y + bz * zenithObject.z < 0;
-        if (!aBelow || !bBelow) continue;
+        // EITHER endpoint below: the dashes meet the solid lines exactly at
+        // the horizon crossing instead of leaving a gap there.
+        if (!aBelow && !bBelow) continue;
         target[vertexCount * 3] = ax;
         target[vertexCount * 3 + 1] = ay;
         target[vertexCount * 3 + 2] = az;
@@ -701,9 +705,10 @@ export class SkyLayer {
     this.eclipticBandFill.visible = bandOpacity > 0.003;
     (this.eclipticBandFill.material as THREE.MeshBasicMaterial).opacity = bandOpacity * 0.3;
     // The dotted continuation matters while the ground hides the lower sky;
-    // it hands off as the ground itself fades from view. Noticeably brighter
-    // than the band fill so the loop-around actually reads.
-    const belowOpacity = Math.min(1, bandOpacity * 2.4) * groundFade;
+    // it hands off as the ground itself fades from view. Clearly brighter
+    // than the band fill so the loop-around actually reads, day or night.
+    const belowOpacity =
+      bandOpacity <= 0 ? 0 : Math.max(0.42, Math.min(1, bandOpacity * 2.4)) * groundFade;
     this.eclipticBandBelow.visible = belowOpacity > 0.003;
     (this.eclipticBandBelow.material as THREE.LineBasicMaterial).opacity = belowOpacity;
     const groundStarOpacity = clamp01((-sunAltitudeDeg - 3) / 11);

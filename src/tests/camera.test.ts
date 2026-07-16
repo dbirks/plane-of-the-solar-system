@@ -4,6 +4,7 @@ import { stepCriticalSpring } from "../camera/camera-spring";
 import {
   earthMoonCompositionForAltitude,
   journeyCompositionForSlider,
+  nadirBlendForAltitude,
   OBSERVER_SWING_RAD,
   REVEAL_NORTH_LIFT,
   revealBlendForAltitude,
@@ -89,13 +90,14 @@ describe("whole-Earth composition", () => {
     expect(journeyCompositionForSlider(1)).toBe(1);
   });
 
-  it("runs the reveal as one motion from ~300 m, settled before whole Earth", () => {
+  it("holds the map view to ~200 km, then banks into the ball by ~2000 km", () => {
     expect(revealBlendForAltitude(2)).toBe(0);
-    expect(revealBlendForAltitude(200)).toBe(0);
-    // The camera starts swinging almost as soon as the ground lets go…
-    expect(revealBlendForAltitude(1_000)).toBeGreaterThan(0.02);
-    expect(revealBlendForAltitude(100_000)).toBeGreaterThan(0.5);
-    expect(revealBlendForAltitude(100_000)).toBeLessThan(0.95);
+    // The whole map leg stays dead-centered on the observer's dot…
+    expect(revealBlendForAltitude(1_000)).toBe(0);
+    expect(revealBlendForAltitude(100_000)).toBe(0);
+    // …then the swing runs its band…
+    expect(revealBlendForAltitude(500_000)).toBeGreaterThan(0.2);
+    expect(revealBlendForAltitude(500_000)).toBeLessThan(0.8);
     // …and is fully settled well before whole Earth: from there out the
     // journey only zooms.
     expect(revealBlendForAltitude(2_000_000)).toBe(1);
@@ -103,7 +105,7 @@ describe("whole-Earth composition", () => {
     expect(revealBlendForAltitude(8_000_000_000_000)).toBe(1);
     // Monotonic through the whole band.
     let previous = 0;
-    for (let exponent = 2.5; exponent <= 6.3; exponent += 0.05) {
+    for (let exponent = 5.3; exponent <= 6.3; exponent += 0.05) {
       const value = revealBlendForAltitude(10 ** exponent);
       expect(value).toBeGreaterThanOrEqual(previous);
       previous = value;
@@ -127,10 +129,10 @@ describe("whole-Earth composition", () => {
     const nearWholeEarth = earthMoonCompositionForAltitude(20_000_000, moonRay, gazeDown, 46);
     const atEarthMoon = earthMoonCompositionForAltitude(500_000_000, moonRay, gazeDown, 46);
     expect(nearWholeEarth.blend).toBeLessThan(0.3);
-    expect(atEarthMoon.blend).toBe(1);
+    expect(atEarthMoon.blend).toBeGreaterThan(0.99);
     // Moon 69.5° off the gaze → FOV covers it, capped for sanity.
     expect(atEarthMoon.fovDeg).toBeGreaterThan(46);
-    expect(atEarthMoon.fovDeg).toBeLessThanOrEqual(100);
+    expect(atEarthMoon.fovDeg).toBeLessThanOrEqual(78);
     // A Moon nearly along the gaze keeps the base FOV.
     expect(
       earthMoonCompositionForAltitude(500_000_000, [0.1, -0.99, 0.1], gazeDown, 46).fovDeg,
@@ -164,5 +166,15 @@ describe("distance readout", () => {
     expect(formatDistance(8_000_000_000_000, "mi")).toBe("Distance from Earth · 53 AU");
     expect(formatBodyRange(382_500_000, "mi")).toBe("237,674 mi");
     expect(formatBodyRange(382_500_000, "km")).toBe("382,500 km");
+  });
+});
+
+describe("nadir map beat", () => {
+  it("drops to the straight-down map view within the first ~60 m", () => {
+    expect(nadirBlendForAltitude(2)).toBe(0);
+    expect(nadirBlendForAltitude(15)).toBe(0);
+    expect(nadirBlendForAltitude(30)).toBeGreaterThan(0.3);
+    expect(nadirBlendForAltitude(65)).toBe(1);
+    expect(nadirBlendForAltitude(1_000_000)).toBe(1);
   });
 });

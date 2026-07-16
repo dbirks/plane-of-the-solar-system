@@ -78,10 +78,6 @@ export function MoonInset() {
           </div>
         </dl>
       </div>
-      <p className="moon-inset-note">
-        A close-up for reading the phase. Out in the sky, the Moon keeps its true size and
-        distance.
-      </p>
     </aside>
   );
 }

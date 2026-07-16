@@ -4,6 +4,7 @@ import { type FeatureFlags, readFeatureFlags } from "./feature-flags";
 import { setActiveDistanceUnit, setGroundElevationM } from "../camera/distance-format";
 import { nearestLandmark } from "../camera/scale-domains";
 import { compassSupported } from "../location/compass-mode";
+import { locateAndGo } from "../location/locate";
 import { nearestPlace } from "../location/nearest-place";
 import { resolveObserverLocation } from "../location/observer-location";
 import { togglePhoneLook } from "../location/phone-look";
@@ -77,6 +78,31 @@ export function App() {
         </div>
         <div className="header-actions">
           <span className="backend-pill">{telemetry.backend}</span>
+          <button
+            type="button"
+            className="quiet-button icon-button"
+            aria-label="Center on my location"
+            onClick={() => locateAndGo()}
+          >
+            {/* Lucide "locate" (open crosshair). */}
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="2" x2="5" y1="12" y2="12" />
+              <line x1="19" x2="22" y1="12" y2="12" />
+              <line x1="12" x2="12" y1="2" y2="5" />
+              <line x1="12" x2="12" y1="19" y2="22" />
+              <circle cx="12" cy="12" r="7" />
+            </svg>
+          </button>
           {compassSupported() && (
             <button
               type="button"
@@ -85,7 +111,7 @@ export function App() {
               aria-pressed={phoneLookActive}
               onClick={() => void togglePhoneLook()}
             >
-              {/* Lucide "compass", inlined (no runtime deps). */}
+              {/* Lucide "smartphone" with motion arcs — tilt navigation. */}
               <svg
                 width="15"
                 height="15"
@@ -97,8 +123,9 @@ export function App() {
                 strokeLinejoin="round"
                 aria-hidden="true"
               >
-                <circle cx="12" cy="12" r="10" />
-                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+                <rect width="10" height="14" x="3" y="8" rx="2" />
+                <path d="M5 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2.4" />
+                <path d="M8 18h.01" />
               </svg>
             </button>
           )}
@@ -138,6 +165,9 @@ export function App() {
 
       <CompassRibbon />
       <ScaleSlider />
+      <span id="imagery-credit" className="imagery-credit" style={{ visibility: "hidden" }}>
+        Imagery © Esri, Maxar, Earthstar Geographics
+      </span>
       <MoonInset />
       <BodyInset />
       <DebugPanel flags={flags} />

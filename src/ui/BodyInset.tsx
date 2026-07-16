@@ -75,6 +75,10 @@ export function BodyInset() {
         sizePx: DISC_SIZE_PX,
         illuminatedFraction: body.id === "sun" ? 1 : body.illuminatedFraction,
         litOnRight: body.litOnRight,
+        // Pluto's southern hemisphere was unimaged (black) during the New
+        // Horizons flyby: crop to the imaged band around the heart.
+        sourceRect:
+          body.id === "pluto" ? { x: 0.33, y: 0.04, width: 0.34, height: 0.62 } : undefined,
       });
     draw();
     if (image && !image.complete) {
@@ -141,10 +145,6 @@ export function BodyInset() {
           )}
         </dl>
       </div>
-      <p className="moon-inset-note">
-        A close-up of the surface and phase. Out in the sky, {body.label} keeps its true size and
-        distance.
-      </p>
     </aside>
   );
 }

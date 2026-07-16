@@ -147,9 +147,9 @@ input:focus-visible {
 
 /* Inset close buttons: a slightly smaller circle than the header's. */
 .inset-close {
-  width: 36px;
-  height: 36px;
-  font-size: 1.05rem;
+  width: 38px;
+  height: 38px;
+  font-size: 1.4rem;
   line-height: 1;
 }
 
@@ -491,7 +491,9 @@ input:focus-visible {
 .landmark-track {
   position: absolute;
   top: 0;
-  right: 16px;
+  /* The 2px rail runs centered in the 26px input: 13px from the assembly
+     edge. Notches (12px wide, right-aligned here) straddle it. */
+  right: 7px;
   width: 44px;
   height: 100%;
   pointer-events: none;
@@ -776,6 +778,18 @@ input:focus-visible {
   color: #9cc4ff;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* Tile attribution, shown while satellite imagery is on screen. */
+.imagery-credit {
+  position: absolute;
+  z-index: 4;
+  bottom: 10px;
+  left: 12px;
+  color: rgb(200 216 218 / 0.55);
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  pointer-events: none;
 }
 
 .intro-permission-note {
