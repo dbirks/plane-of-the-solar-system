@@ -205,16 +205,17 @@ function createSceneObjects(
   const localCap = new THREE.Mesh(new THREE.CircleGeometry(1, 128), capMaterial);
   localCap.rotation.x = -Math.PI / 2;
 
-  // Maps-style blue: a bright "you are here" dot inside a darker blue rim
-  // (back-face shell, so the rim reads as an outline around the dot).
+  // Maps-style blue: a deep-blue "you are here" dot inside a white ring
+  // (back-face shell, so the ring reads as an outline around the dot) —
+  // dark core + bright ring stays visible on light satellite imagery.
   const observerMarker = new THREE.Mesh(
     new THREE.SphereGeometry(1, 32, 16),
-    new THREE.MeshBasicMaterial({ color: 0x74b3ff, transparent: true, opacity: 0 }),
+    new THREE.MeshBasicMaterial({ color: 0x1d5bd8, transparent: true, opacity: 0 }),
   );
   const observerMarkerRim = new THREE.Mesh(
-    new THREE.SphereGeometry(1.5, 32, 16),
+    new THREE.SphereGeometry(1.45, 32, 16),
     new THREE.MeshBasicMaterial({
-      color: 0x1d4e9e,
+      color: 0xf4f8ff,
       side: THREE.BackSide,
       depthWrite: false,
       transparent: true,
@@ -670,9 +671,13 @@ export class SpaceRenderer {
     // In the map view the camera is glued straight down over the dot: any
     // leftover free-look (the opening target, an old drag) unwinds here so
     // the pull-out never swivels off toward the horizon it used to face.
+    // The MAP LEG ONLY: past the reveal bank the same offsets are the orbit
+    // drag, and decaying them slid every space view back to the guided frame.
+    const springAltitudeM = Math.exp(this.distanceSpring.value);
     if (
       this.pointerId === null &&
-      nadirBlendForAltitude(Math.exp(this.distanceSpring.value)) > 0.5
+      nadirBlendForAltitude(springAltitudeM) > 0.5 &&
+      revealBlendForAltitude(springAltitudeM) < 0.5
     ) {
       const mapDecay = Math.exp(-2.4 * Math.min(0.25, Math.max(0, rawDeltaSeconds)));
       this.yawOffset *= mapDecay;
@@ -786,11 +791,15 @@ export class SpaceRenderer {
     this.objects.coordinateGrid.position.set(0, 0, 0);
     this.objects.coordinateGrid.scale.setScalar(1_400);
 
+    // Twilight state drives sky, atmosphere, star visibility — and how
+    // brightly the satellite imagery reads (night dims the map too).
+    const daylight = smoothstep(-6, 8, this.sunAltitudeDeg);
+
     // Satellite imagery under the map view; the credit line shows with it.
-    this.satellitePatches?.update(observerSurfaceRender, renderUnitsPerMeter, altitudeM);
+    this.satellitePatches?.update(observerSurfaceRender, renderUnitsPerMeter, altitudeM, daylight);
     this.imageryCreditElement ??= document.getElementById("imagery-credit");
     if (this.imageryCreditElement) {
-      const imageryVisible = altitudeM > 15 && altitudeM < 1_200_000;
+      const imageryVisible = altitudeM > 25 && altitudeM < 1_200_000;
       this.imageryCreditElement.style.visibility = imageryVisible ? "visible" : "hidden";
     }
 
@@ -827,9 +836,6 @@ export class SpaceRenderer {
       markerMaterial.transparent = true;
       markerMaterial.opacity = markerReveal;
     }
-
-    // Twilight state drives sky, atmosphere, and star visibility.
-    const daylight = smoothstep(-6, 8, this.sunAltitudeDeg);
 
     const atmosphereExit = smoothstep(45_000, 450_000, altitudeM);
     (this.objects.atmosphereInside.material as THREE.MeshBasicMaterial).opacity =
@@ -925,13 +931,8 @@ export class SpaceRenderer {
       wholeEarthFovDegForAspect(this.camera.aspect),
       composition,
     );
-    if (this.moonPlacement) {
-      const framing = earthMoonCompositionForAltitude(
-        altitudeM,
-        this.moonPlacement.rayLocal,
-        [-this.cameraDirLocal.x, -this.cameraDirLocal.y, -this.cameraDirLocal.z],
-        baseFovDeg,
-      );
+    {
+      const framing = earthMoonCompositionForAltitude(altitudeM);
       if (framing.blend > 0) {
         baseFovDeg = THREE.MathUtils.lerp(baseFovDeg, framing.fovDeg, framing.blend);
       }
@@ -1043,13 +1044,17 @@ export class SpaceRenderer {
     // quaternion (smoothed), which sails through the zenith with no flip —
     // heading+pitch decomposition is gimbal-locked straight up. The free-look
     // offsets are kept in sync so leaving compass mode never jumps the view.
+    // NOT gated on the pointer: a stray touch used to freeze the view in
+    // place (drag-look is already suppressed while tilt drives; taps still
+    // select markers). And tilt belongs to the GROUND: it hands off entirely
+    // as the map view takes over, so the journey up never fights the phone.
     const compassQuaternion = appState.compassQuaternion;
-    if (compassQuaternion !== null && this.pointerId === null && altitudeM < 200_000) {
+    const tiltWeight = 1 - smoothstep(15, 60, altitudeM);
+    if (compassQuaternion !== null && tiltWeight > 0.001) {
       const target = new THREE.Quaternion(...compassQuaternion);
       this.compassSmoothed ??= this.camera.quaternion.clone();
       this.compassSmoothed.slerp(target, 1 - Math.exp(-7 * deltaSeconds));
-      const groundWeight = 1 - smoothstep(100_000, 200_000, altitudeM);
-      this.camera.quaternion.slerp(this.compassSmoothed, groundWeight);
+      this.camera.quaternion.slerp(this.compassSmoothed, tiltWeight);
       const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
       this.yawOffset = Math.atan2(-gaze.x, -gaze.z) - baseYawRad;
       this.pitchOffset = Math.asin(THREE.MathUtils.clamp(gaze.y, -1, 1));
@@ -1186,7 +1191,7 @@ export class SpaceRenderer {
         // over the map/satellite leg, back with the reveal in outer space,
         // and it retires when the orbit geometry takes over the story.
         opacity: layers["ecliptic-rings"]
-          ? 0.55 * (1 - smoothstep(15, 55, altitudeM)) + 0.7 * revealBlend * (1 - systemReveal)
+          ? 0.55 * (1 - smoothstep(10, 30, altitudeM)) + 0.7 * revealBlend * (1 - systemReveal)
           : 0,
         occluder: captionOccluder,
       },

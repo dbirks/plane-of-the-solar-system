@@ -703,7 +703,7 @@ export class SkyLayer {
     // sliced through the straight-down imagery — and returns with the reveal,
     // where the depth test carries it cleanly BEHIND the globe.
     const daylightBoost = 1 + clamp01((sunAltitudeDeg + 2) / 8) * 1.2;
-    const mapLeg = smoothstepNumber(15, 55, altitudeM) * (1 - revealBlendForAltitude(altitudeM));
+    const mapLeg = smoothstepNumber(10, 30, altitudeM) * (1 - revealBlendForAltitude(altitudeM));
     const bandOpacity = eclipticBandEnabled
       ? 0.14 * daylightBoost * (1 - systemReveal) * (1 - mapLeg)
       : 0;

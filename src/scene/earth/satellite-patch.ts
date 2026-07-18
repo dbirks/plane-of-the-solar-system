@@ -6,11 +6,13 @@ import * as THREE from "three/webgpu";
  * close-up fetches public map tiles for that area from Esri World Imagery —
  * documented in the chip copy and credits).
  *
- * Four nested web-mercator patches (zooms 16/13/10/7), each a 4×4-tile
- * canvas draped on a ground-aligned quad centered near the observer. Tiles
- * persist in the Cache API so revisits render offline-fast without
- * re-downloading. The whole group fades in as the map view takes over
- * (~20–60 m up) and hands off to the Blue Marble globe on the way out.
+ * Five nested web-mercator patches (zooms 18/15/12/9/6), each a 4×4-tile
+ * canvas draped on a ground-aligned quad centered near the observer — the
+ * widest spans ~1,900 km so the pull-out never shows a blank ring between
+ * the imagery and the Blue Marble takeover. Tiles persist in the Cache API
+ * so revisits render offline-fast without re-downloading. The whole group
+ * fades in as the map view takes over (~25–60 m up, after the nadir drop)
+ * and hands off to the Blue Marble globe on the way out.
  */
 
 const TILE_SOURCE =
@@ -26,7 +28,8 @@ const PATCH_LEVELS = [
   { zoom: 18, maxAltitudeM: 5_000 },
   { zoom: 15, maxAltitudeM: 45_000 },
   { zoom: 12, maxAltitudeM: 350_000 },
-  { zoom: 9, maxAltitudeM: Number.POSITIVE_INFINITY },
+  { zoom: 9, maxAltitudeM: 1_200_000 },
+  { zoom: 6, maxAltitudeM: Number.POSITIVE_INFINITY },
 ] as const;
 
 const METERS_PER_DEG_LAT = 110_574;
@@ -189,14 +192,17 @@ export class SatellitePatches {
 
   /**
    * Per frame: sit the patches on the ground under the observer and blend
-   * them by altitude — in with the map view, out to the Blue Marble.
+   * them by altitude — in with the map view (after the nadir drop), out to
+   * the Blue Marble. `daylight` (0 night – 1 day) dims the imagery toward a
+   * cool night tone so the map matches the sky's actual hour.
    */
   update(
     observerSurfaceRender: THREE.Vector3,
     renderUnitsPerMeter: number,
     altitudeM: number,
+    daylight = 1,
   ): void {
-    const fadeIn = smoothstep(15, 55, altitudeM);
+    const fadeIn = smoothstep(25, 60, altitudeM);
     const fadeOut = 1 - smoothstep(300_000, 1_200_000, altitudeM);
     const groupOpacity = fadeIn * fadeOut;
     for (const patch of this.patches) {
@@ -210,6 +216,13 @@ export class SatellitePatches {
       patch.mesh.visible = patch.loaded && opacity > 0.01;
       patch.material.opacity = opacity;
       if (!patch.mesh.visible) continue;
+      // Night falls on the map too: cool-blue dim, not pure black, so
+      // streets stay legible the way a moonlit ground does.
+      patch.material.color.setRGB(
+        0.2 + 0.8 * daylight,
+        0.26 + 0.74 * daylight,
+        0.38 + 0.62 * daylight,
+      );
       patch.mesh.position.set(
         observerSurfaceRender.x + patch.centerEastM * renderUnitsPerMeter,
         observerSurfaceRender.y + (2 + patch.zoom * 0.4) * renderUnitsPerMeter,

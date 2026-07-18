@@ -1,5 +1,3 @@
-import type { Vec3d } from "../coordinates/vec3d";
-
 export function wholeEarthFovDegForAspect(viewportAspect: number): number {
   if (viewportAspect >= 0.8) return 46;
 
@@ -42,32 +40,20 @@ export type FramingWiden = {
 
 /**
  * Beyond whole Earth the gaze stays pinned on Earth — no yaw or pitch swing,
- * ever — and only the FOV widens so the Moon (at `moonRayLocal`, true
- * distance) shares the frame with the planet. `gazeLocal` is the unit
- * direction the guided camera looks along (toward Earth's center).
+ * ever — and only the FOV widens toward the system framing's 78° so the
+ * Moon's neighborhood shares the frame with the planet. Purely altitude-
+ * driven: an earlier moon-separation feedback made the FOV (and with it the
+ * whole frame, band included) creep and kink as the camera crossed the
+ * Moon's distance — the frame must move only when the traveler moves.
  */
-export function earthMoonCompositionForAltitude(
-  altitudeM: number,
-  moonRayLocal: Vec3d,
-  gazeLocal: Vec3d,
-  baseFovDeg: number,
-): FramingWiden {
-  // A long, gentle band with the FOV capped at the system framing's 78°:
-  // the widening never outruns the zoom, so the pull-out reads as one
-  // continuous recession with no stall and no dolly-zoom "retilt".
+export function earthMoonCompositionForAltitude(altitudeM: number): FramingWiden {
+  // A long, gentle band: the widening never outruns the zoom, so the
+  // pull-out reads as one continuous recession with no stall and no
+  // dolly-zoom "retilt".
   const logAltitude = Math.log10(Math.max(1, altitudeM));
   const blendT = Math.min(1, Math.max(0, (logAltitude - 7.4) / (8.7 - 7.4)));
   const blend = blendT * blendT * (3 - 2 * blendT);
-
-  // Angle between the Earth-pinned gaze and the Moon's direction.
-  const separationCos =
-    moonRayLocal[0] * gazeLocal[0] +
-    moonRayLocal[1] * gazeLocal[1] +
-    moonRayLocal[2] * gazeLocal[2];
-  const separationDeg = (Math.acos(Math.min(1, Math.max(-1, separationCos))) * 180) / Math.PI;
-  const fovDeg = Math.min(78, Math.max(baseFovDeg, separationDeg * 2.2 + 8));
-
-  return { blend, fovDeg };
+  return { blend, fovDeg: 78 };
 }
 
 /**
@@ -100,20 +86,23 @@ export function systemCompositionForAltitude(altitudeM: number, baseFovDeg: numb
  * to the horizon, so there is no mid-journey spin.
  */
 export function nadirBlendForAltitude(altitudeM: number): number {
+  // Fully aerial by ~30 m (100 ft): the satellite imagery fades in right
+  // after (25–60 m), so the map is always entered looking straight down.
   const logAltitude = Math.log10(Math.max(1, altitudeM));
-  const t = Math.min(1, Math.max(0, (logAltitude - 1.2) / (1.8 - 1.2)));
+  const t = Math.min(1, Math.max(0, (logAltitude - 1.0) / (1.48 - 1.0)));
   return t * t * (3 - 2 * t);
 }
 
 export function revealBlendForAltitude(altitudeM: number): number {
   // The realign is a LATE, slow beat: the map view stays glued straight
-  // down over the observer's dot until ~2000 km out, then from there to
-  // ~16,000 km (finishing right at whole Earth) the vantage banks around
-  // the planet, the plane settles dead level, and the tilt shows. Any
-  // earlier and the swing visibly drags the view off the dot.
+  // down over the observer's dot until ~1300 km out, then over more than a
+  // decade of altitude (finishing right at whole Earth, 2e7 m) the vantage
+  // banks around the planet, the plane settles dead level, and the tilt
+  // shows. Smootherstep (zero velocity AND acceleration at both ends) so
+  // the bank's onset is imperceptible rather than a sudden rotation.
   const logAltitude = Math.log10(Math.max(1, altitudeM));
-  const t = Math.min(1, Math.max(0, (logAltitude - 6.3) / (7.2 - 6.3)));
-  return t * t * (3 - 2 * t);
+  const t = Math.min(1, Math.max(0, (logAltitude - 6.1) / (7.3 - 6.1)));
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
 /**
