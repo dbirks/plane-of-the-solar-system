@@ -3,34 +3,46 @@ import * as THREE from "three/webgpu";
 /**
  * Close-up satellite imagery around the observer (SPEC exception, user
  * opt-in by design: coordinates already live in the URL, and viewing the
- * close-up fetches public map tiles for that area from Esri World Imagery —
- * documented in the chip copy and credits).
+ * close-up fetches public map tiles for that area from Esri World Imagery
+ * and NASA GIBS — documented in the chip copy and credits).
  *
- * Five nested web-mercator patches (zooms 18/15/12/9/6), each a 4×4-tile
- * canvas draped on a ground-aligned quad centered near the observer — the
- * widest spans ~1,900 km so the pull-out never shows a blank ring between
- * the imagery and the Blue Marble takeover. Tiles persist in the Cache API
- * so revisits render offline-fast without re-downloading. The whole group
- * fades in as the map view takes over (~25–60 m up, after the nadir drop)
- * and hands off to the Blue Marble globe on the way out.
+ * Seven nested web-mercator patches (zooms 18…6, every two steps), each a
+ * 4×4-tile canvas draped on a ground-aligned quad centered near the
+ * observer — close spacing so the pull-out degrades smoothly instead of
+ * jumping between sharp and blurry, and the widest (~1,900 km) never shows
+ * a blank ring before the Blue Marble takeover. At night the wide levels
+ * additionally carry NASA's VIIRS Black Marble city lights, blended in as
+ * the sky darkens. Tiles persist in the Cache API so revisits render
+ * offline-fast without re-downloading. The whole group fades in as the map
+ * view takes over (~25–60 m up, after the nadir drop) and hands off to the
+ * globe on the way out.
  */
 
 const TILE_SOURCE =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile";
-export const TILE_ATTRIBUTION = "Imagery © Esri, Maxar, Earthstar Geographics";
+/** NASA GIBS: VIIRS Black Marble (2016 composite), web-mercator, z0–8. */
+const NIGHT_TILE_SOURCE =
+  "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/default/GoogleMapsCompatible_Level8";
+export const TILE_ATTRIBUTION = "Imagery © Esri, Maxar, Earthstar Geographics · Night: NASA VIIRS";
 const TILE_CACHE = "satellite-tiles-v1";
 const TILES_PER_SIDE = 4;
 const TILE_PX = 256;
 
 /** Patch zoom levels, sharpest first, with per-level visibility ceilings.
- * z18 ≈ 0.6 m/px keeps the first few hundred meters street-sharp. */
+ * z18 ≈ 0.6 m/px keeps the first few hundred meters street-sharp; two-step
+ * spacing keeps each handoff a gentle blur, not a jump. */
 const PATCH_LEVELS = [
   { zoom: 18, maxAltitudeM: 5_000 },
-  { zoom: 15, maxAltitudeM: 45_000 },
-  { zoom: 12, maxAltitudeM: 350_000 },
-  { zoom: 9, maxAltitudeM: 1_200_000 },
+  { zoom: 16, maxAltitudeM: 20_000 },
+  { zoom: 14, maxAltitudeM: 80_000 },
+  { zoom: 12, maxAltitudeM: 300_000 },
+  { zoom: 10, maxAltitudeM: 900_000 },
+  { zoom: 8, maxAltitudeM: 2_500_000 },
   { zoom: 6, maxAltitudeM: Number.POSITIVE_INFINITY },
 ] as const;
+
+/** GIBS Black Marble tops out at z8: the wide levels carry the night lights. */
+const NIGHT_MAX_ZOOM = 8;
 
 const METERS_PER_DEG_LAT = 110_574;
 
@@ -55,9 +67,8 @@ export function tileBounds(tileX: number, tileY: number, zoom: number) {
   };
 }
 
-async function fetchTile(zoom: number, x: number, y: number): Promise<ImageBitmap | null> {
-  const url = `${TILE_SOURCE}/${zoom}/${y}/${x}`;
-  // Bursts of 64 tiles can hit provider throttling and spotty mobile
+async function fetchTile(url: string): Promise<ImageBitmap | null> {
+  // Bursts of tiles can hit provider throttling and spotty mobile
   // networks — retry a few times with backoff before giving up.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -81,12 +92,16 @@ type Patch = {
   maxAltitudeM: number;
   mesh: THREE.Mesh;
   material: THREE.MeshBasicMaterial;
+  /** VIIRS city lights riding the same footprint (wide levels only). */
+  nightMesh: THREE.Mesh | null;
+  nightMaterial: THREE.MeshBasicMaterial | null;
   /** Ground offsets/extent in meters relative to the observer. */
   centerEastM: number;
   centerNorthM: number;
   widthM: number;
   heightM: number;
   loaded: boolean;
+  nightLoaded: boolean;
 };
 
 export class SatellitePatches {
@@ -135,42 +150,105 @@ export class SatellitePatches {
       const centerNorthM =
         ((west.northDeg + east.southDeg) / 2 - observerLatitudeDeg) * METERS_PER_DEG_LAT;
 
+      // City lights on the wide levels: an additive quad just above the day
+      // imagery, so night streets glow instead of going flat gray.
+      let nightMesh: THREE.Mesh | null = null;
+      let nightMaterial: THREE.MeshBasicMaterial | null = null;
+      let nightCanvas: HTMLCanvasElement | null = null;
+      let nightTexture: THREE.CanvasTexture | null = null;
+      if (level.zoom <= NIGHT_MAX_ZOOM) {
+        nightCanvas = document.createElement("canvas");
+        nightCanvas.width = TILES_PER_SIDE * TILE_PX;
+        nightCanvas.height = TILES_PER_SIDE * TILE_PX;
+        nightTexture = new THREE.CanvasTexture(nightCanvas);
+        nightTexture.colorSpace = THREE.SRGBColorSpace;
+        nightTexture.anisotropy = 4;
+        nightMaterial = new THREE.MeshBasicMaterial({
+          map: nightTexture,
+          // Warm amber tint: raw VIIRS added at strength turns a whole
+          // metro area into daylight-gray — tinted and capped it reads as
+          // city glow instead.
+          color: new THREE.Color(0.95, 0.72, 0.45),
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          depthTest: false,
+          blending: THREE.AdditiveBlending,
+        });
+        nightMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), nightMaterial);
+        nightMesh.rotation.x = -Math.PI / 2;
+        // Above every day level (max 1.9), below the observer marker (2.5).
+        nightMesh.renderOrder = 2.1 + level.zoom / 100;
+        nightMesh.frustumCulled = false;
+        nightMesh.visible = false;
+        this.group.add(nightMesh);
+      }
+
       const patch: Patch = {
         zoom: level.zoom,
         maxAltitudeM: level.maxAltitudeM,
         mesh,
         material,
+        nightMesh,
+        nightMaterial,
         centerEastM,
         centerNorthM,
         widthM,
         heightM,
         loaded: false,
+        nightLoaded: false,
       };
       this.patches.push(patch);
 
-      void this.loadPatch(patch, canvas, texture, tileX0, tileY0);
+      void this.loadPatch(
+        canvas,
+        texture,
+        tileX0,
+        tileY0,
+        (x, y) => `${TILE_SOURCE}/${level.zoom}/${y}/${x}`,
+        "#2c3a33",
+        () => {
+          patch.loaded = true;
+        },
+      );
+      if (nightCanvas && nightTexture) {
+        void this.loadPatch(
+          nightCanvas,
+          nightTexture,
+          tileX0,
+          tileY0,
+          (x, y) => `${NIGHT_TILE_SOURCE}/${level.zoom}/${y}/${x}.png`,
+          // Additive: black adds nothing, so a failed tile simply stays dark.
+          "#000000",
+          () => {
+            patch.nightLoaded = true;
+          },
+        );
+      }
     }
   }
 
   private async loadPatch(
-    patch: Patch,
     canvas: HTMLCanvasElement,
     texture: THREE.CanvasTexture,
     tileX0: number,
     tileY0: number,
+    urlFor: (x: number, y: number) => string,
+    fillStyle: string,
+    onLoaded: () => void,
   ): Promise<void> {
     const context = canvas.getContext("2d");
     if (!context) return;
-    // Neutral ground tone beneath the tiles: a failed tile becomes a muted
-    // square, never a transparent-black hole.
-    context.fillStyle = "#2c3a33";
+    // Neutral tone beneath the tiles: a failed tile becomes a muted square
+    // (or stays dark on the additive night layer), never a hole.
+    context.fillStyle = fillStyle;
     context.fillRect(0, 0, canvas.width, canvas.height);
     let landed = 0;
     const jobs: Promise<void>[] = [];
     for (let row = 0; row < TILES_PER_SIDE; row += 1) {
       for (let column = 0; column < TILES_PER_SIDE; column += 1) {
         jobs.push(
-          fetchTile(patch.zoom, tileX0 + column, tileY0 + row).then((bitmap) => {
+          fetchTile(urlFor(tileX0 + column, tileY0 + row)).then((bitmap) => {
             if (!bitmap || this.disposed) return;
             context.drawImage(bitmap, column * TILE_PX, row * TILE_PX);
             bitmap.close();
@@ -186,7 +264,7 @@ export class SatellitePatches {
     // keeps any stragglers as muted squares rather than holes.
     if (landed >= (TILES_PER_SIDE * TILES_PER_SIDE) / 2) {
       texture.needsUpdate = true;
-      patch.loaded = true;
+      onLoaded();
     }
   }
 
@@ -194,7 +272,8 @@ export class SatellitePatches {
    * Per frame: sit the patches on the ground under the observer and blend
    * them by altitude — in with the map view (after the nadir drop), out to
    * the Blue Marble. `daylight` (0 night – 1 day) dims the imagery toward a
-   * cool night tone so the map matches the sky's actual hour.
+   * cool night tone and raises the VIIRS city lights so the map matches the
+   * sky's actual hour.
    */
   update(
     observerSurfaceRender: THREE.Vector3,
@@ -205,6 +284,13 @@ export class SatellitePatches {
     const fadeIn = smoothstep(25, 60, altitudeM);
     const fadeOut = 1 - smoothstep(300_000, 1_200_000, altitudeM);
     const groupOpacity = fadeIn * fadeOut;
+    // The lights arrive once high enough that z8's ~600 m/px reads sharp —
+    // below that the cool-dimmed streets already carry the night. Capped at
+    // 0.45: additive VIIRS at full strength whites out a whole metro area
+    // (the ACES tonemap saturates), and the two night levels CROSSFADE
+    // below rather than stack — stacked they doubled the glow.
+    const nightReach = smoothstep(25_000, 70_000, altitudeM) * (1 - daylight) * 0.3;
+    const nightWideBlend = smoothstep(250_000, 450_000, altitudeM);
     for (const patch of this.patches) {
       // Long overlap between levels: the coarser patch is already fully
       // present underneath before the finer one thins out. The widest level
@@ -215,7 +301,13 @@ export class SatellitePatches {
       const opacity = groupOpacity * levelFade;
       patch.mesh.visible = patch.loaded && opacity > 0.01;
       patch.material.opacity = opacity;
-      if (!patch.mesh.visible) continue;
+      if (patch.nightMesh && patch.nightMaterial) {
+        const nightLevelFade = patch.zoom === 8 ? 1 - nightWideBlend : nightWideBlend;
+        const nightOpacity = groupOpacity * nightReach * nightLevelFade;
+        patch.nightMesh.visible = patch.nightLoaded && nightOpacity > 0.01;
+        patch.nightMaterial.opacity = nightOpacity;
+      }
+      if (!patch.mesh.visible && !patch.nightMesh?.visible) continue;
       // Night falls on the map too: cool-blue dim, not pure black, so
       // streets stay legible the way a moonlit ground does.
       patch.material.color.setRGB(
@@ -223,16 +315,24 @@ export class SatellitePatches {
         0.26 + 0.74 * daylight,
         0.38 + 0.62 * daylight,
       );
+      const positionX = observerSurfaceRender.x + patch.centerEastM * renderUnitsPerMeter;
+      const positionZ = observerSurfaceRender.z - patch.centerNorthM * renderUnitsPerMeter;
+      const scaleX = patch.widthM * renderUnitsPerMeter;
+      const scaleY = patch.heightM * renderUnitsPerMeter;
       patch.mesh.position.set(
-        observerSurfaceRender.x + patch.centerEastM * renderUnitsPerMeter,
+        positionX,
         observerSurfaceRender.y + (2 + patch.zoom * 0.4) * renderUnitsPerMeter,
-        observerSurfaceRender.z - patch.centerNorthM * renderUnitsPerMeter,
+        positionZ,
       );
-      patch.mesh.scale.set(
-        patch.widthM * renderUnitsPerMeter,
-        patch.heightM * renderUnitsPerMeter,
-        1,
-      );
+      patch.mesh.scale.set(scaleX, scaleY, 1);
+      if (patch.nightMesh) {
+        patch.nightMesh.position.set(
+          positionX,
+          observerSurfaceRender.y + (3 + patch.zoom * 0.4) * renderUnitsPerMeter,
+          positionZ,
+        );
+        patch.nightMesh.scale.set(scaleX, scaleY, 1);
+      }
     }
   }
 
@@ -242,6 +342,9 @@ export class SatellitePatches {
       patch.material.map?.dispose();
       patch.material.dispose();
       patch.mesh.geometry.dispose();
+      patch.nightMaterial?.map?.dispose();
+      patch.nightMaterial?.dispose();
+      if (patch.nightMesh) patch.nightMesh.geometry.dispose();
     }
   }
 }

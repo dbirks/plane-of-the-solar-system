@@ -2,6 +2,11 @@ import { create } from "zustand";
 
 import type { SkyBodyId } from "../astronomy/sky-state";
 import { JOURNEY_MIN_DISTANCE_M } from "../camera/scale-domains";
+import {
+  FALLBACK_OBSERVER,
+  type ObserverLocation,
+  resolveObserverLocation,
+} from "../location/observer-location";
 
 export type RendererTelemetry = {
   backend: string;
@@ -75,6 +80,9 @@ export type BodyReadout = {
 };
 
 type AppState = {
+  /** Where the sky is computed from. Updating it re-aims the live scene —
+   * location changes never reload the page. */
+  observer: ObserverLocation;
   targetDistanceM: number;
   telemetry: RendererTelemetry;
   skyReadout: SkyReadout | null;
@@ -93,6 +101,7 @@ type AppState = {
   /** True while the shared phone-look session streams device orientation. */
   phoneLookActive: boolean;
   reducedMotion: boolean;
+  setObserver: (observer: ObserverLocation) => void;
   setTargetDistanceM: (distanceM: number) => void;
   setTelemetry: (telemetry: RendererTelemetry) => void;
   setSkyReadout: (skyReadout: SkyReadout) => void;
@@ -126,6 +135,10 @@ export const INITIAL_TELEMETRY: RendererTelemetry = {
 };
 
 export const useAppStore = create<AppState>((set) => ({
+  observer:
+    typeof window === "undefined"
+      ? FALLBACK_OBSERVER
+      : resolveObserverLocation(window.location.search, window.localStorage),
   targetDistanceM: JOURNEY_MIN_DISTANCE_M,
   telemetry: INITIAL_TELEMETRY,
   skyReadout: null,
@@ -138,6 +151,7 @@ export const useAppStore = create<AppState>((set) => ({
   phoneLookActive: false,
   reducedMotion:
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  setObserver: (observer) => set({ observer }),
   setTargetDistanceM: (targetDistanceM) => set({ targetDistanceM }),
   setTelemetry: (telemetry) => set({ telemetry }),
   setSkyReadout: (skyReadout) => set({ skyReadout }),

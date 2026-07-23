@@ -107,10 +107,13 @@ export function revealBlendForAltitude(altitudeM: number): number {
 
 /**
  * How far around the planet the reveal vantage swings from the observer's
- * zenith (radians, about ecliptic north). ~45°: the observer's dot stays
- * front-ish on the tilted globe, facing the camera, clearly on a side.
+ * zenith (radians, about ecliptic north). ~35°: the observer's dot stays
+ * front-ish on the tilted globe, facing the camera, clearly on a side —
+ * trimmed from 45° because the bank's onset read as "tilting away really
+ * quick", with the ground sliding off-screen; less total swing over the
+ * same altitude band means a gentler apparent rotation.
  */
-export const OBSERVER_SWING_RAD = (45 * Math.PI) / 180;
+export const OBSERVER_SWING_RAD = (35 * Math.PI) / 180;
 
 /** Camera vantage above the ecliptic during the reveal (unitless mix toward
  * ecliptic north; ~8.5° of ecliptic latitude — a near-side-on view so the

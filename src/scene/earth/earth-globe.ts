@@ -36,7 +36,7 @@ export async function loadEarthTextures(baseUrl: string): Promise<{
     const loader = new THREE.TextureLoader();
     const [day, night] = await Promise.all([
       loader.loadAsync(`${baseUrl}textures/earth-day-4096.jpg`),
-      loader.loadAsync(`${baseUrl}textures/earth-night-2048.jpg`),
+      loader.loadAsync(`${baseUrl}textures/earth-night-4096.jpg`),
     ]);
     for (const map of [day, night]) {
       map.colorSpace = THREE.SRGBColorSpace;

@@ -37,7 +37,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   };
 
   return (
-    <div className="intro-backdrop" role="presentation">
+    <div className="intro-backdrop settings-backdrop" role="presentation">
       <aside
         className="intro-dialog settings-dialog"
         role="dialog"
@@ -70,7 +70,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 <strong>Scroll</strong> (or use the rail on the right) to leave the ground.
               </li>
               <li>
-                <strong>Tap a marker</strong> to turn toward that body and read about it.
+                <strong>Tap a marker</strong> to read about that body.
               </li>
             </ul>
           </section>
@@ -78,10 +78,21 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           {compassSupported() && (
             <section>
               <h3>Point with your phone</h3>
-              <p className="settings-hint">Aim your phone at the sky and the view follows.</p>
-              <button type="button" className="quiet-button" onClick={() => void onPhoneLook()}>
-                {phoneLookActive ? "Compass mode on" : "Compass mode"}
-              </button>
+              <label className="guide-row">
+                <span className="guide-text">
+                  <strong>Compass mode</strong>
+                  <small>Aim your phone at the sky and the view follows.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={phoneLookActive}
+                  onChange={() => void onPhoneLook()}
+                />
+                <span className="switch-track" aria-hidden="true">
+                  <span className="switch-knob" />
+                </span>
+              </label>
               {phoneLookStatus && <p className="location-hint">{phoneLookStatus}</p>}
             </section>
           )}
@@ -189,8 +200,15 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 >
                   Esri
                 </a>
-                , Maxar, Earthstar Geographics — tiles for your area are fetched and cached on your
-                device
+                , Maxar, Earthstar Geographics; night lights from{" "}
+                <a
+                  href="https://www.earthdata.nasa.gov/engage/gibs"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  NASA GIBS
+                </a>{" "}
+                (VIIRS Black Marble) — tiles for your area are fetched and cached on your device
               </li>
             </ul>
           </section>

@@ -220,8 +220,10 @@ export class SkyOverlay {
         entry.element.classList.toggle("sky-marker--edge", atEdge);
         if (atEdge) {
           // Edge arrows point off-screen toward the body: rotation measured
-          // from "pointing down", clockwise, in screen coordinates.
-          const rotationDeg = (Math.atan2(ndcX, -ndcY) * 180) / Math.PI;
+          // from "pointing down", clockwise, in screen coordinates. NDC x
+          // negates — CSS positive rotation is clockwise on a y-down screen,
+          // so a body off the LEFT (ndcX < 0) needs +90°, not −90°.
+          const rotationDeg = (Math.atan2(-ndcX, -ndcY) * 180) / Math.PI;
           entry.element.style.setProperty("--edge-rotation", `${rotationDeg.toFixed(1)}deg`);
         }
         const ghosted2 = entry.element.classList.contains("sky-marker--ghost");

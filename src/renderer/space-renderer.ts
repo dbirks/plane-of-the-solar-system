@@ -352,7 +352,8 @@ export class SpaceRenderer {
     // AFTER startup: 64 parallel tile fetches during renderer init starve
     // the first frames on phones, and the imagery only matters above 15 m.
     window.setTimeout(() => {
-      if (this.disposed || !this.scene) return;
+      // A location change may have created the patches already.
+      if (this.disposed || !this.scene || this.satellitePatches) return;
       this.satellitePatches = new SatellitePatches(this.flags.latitudeDeg, this.flags.longitudeDeg);
       this.scene.add(this.satellitePatches.group);
     }, 2_500);
@@ -408,6 +409,49 @@ export class SpaceRenderer {
   lookToward(azimuthDeg: number, altitudeDeg: number): void {
     this.lookTarget = { azimuthDeg, altitudeDeg };
     this.guidanceRequested = false;
+  }
+
+  /**
+   * Re-aim the LIVE scene at a new observer — no reload. Everything baked to
+   * the old zenith re-derives: the globe/guide quaternions, the imagery
+   * patches (recreated around the new point), and the next frame's astronomy.
+   */
+  setObserverLocation(latitudeDeg: number, longitudeDeg: number): void {
+    if (
+      this.flags.latitudeDeg === latitudeDeg &&
+      this.flags.longitudeDeg === longitudeDeg &&
+      this.satellitePatches !== null
+    ) {
+      return;
+    }
+    this.flags.latitudeDeg = latitudeDeg;
+    this.flags.longitudeDeg = longitudeDeg;
+    const zenith = observerToZenithQuaternion(latitudeDeg, longitudeDeg);
+    if (this.objects) {
+      this.objects.earth.quaternion.copy(zenith);
+      this.objects.continentOutlines.quaternion.copy(zenith);
+    }
+    this.earthGuides?.quaternion.copy(zenith);
+    this.axisStubs?.quaternion.copy(zenith);
+    // Recreate the imagery around the new point. When the initial delayed
+    // creation is still pending it will pick up the new coordinates itself;
+    // otherwise dispose and recreate after a beat (never mid-frame-burst).
+    if (this.satellitePatches) {
+      this.scene?.remove(this.satellitePatches.group);
+      this.satellitePatches.dispose();
+      this.satellitePatches = null;
+      window.setTimeout(() => {
+        if (this.disposed || !this.scene || this.satellitePatches) return;
+        this.satellitePatches = new SatellitePatches(
+          this.flags.latitudeDeg,
+          this.flags.longitudeDeg,
+        );
+        this.scene.add(this.satellitePatches.group);
+      }, 300);
+    }
+    this.lastAstronomyUtcMs = Number.NEGATIVE_INFINITY;
+    this.lastOrbitUtcMs = Number.NEGATIVE_INFINITY;
+    this.lastSunEventsUtcMs = Number.NEGATIVE_INFINITY;
   }
 
   /**

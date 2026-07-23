@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import { navigateWithLocation, roundCoarse } from "../location/locate";
+import { applyObserverLocation, roundCoarse } from "../location/locate";
 import { nearestPlace } from "../location/nearest-place";
 import {
   clearSavedObserver,
@@ -13,6 +13,7 @@ const SOURCE_HINTS: Record<ObserverLocation["source"], string> = {
   saved: "Your saved default",
   timezone: "Guessed from your timezone. Approximate is fine for the sky",
   fallback: "Default location",
+  device: "From your device — remembered for next time",
 };
 
 export function ObserverChip({ observer }: { observer: ObserverLocation }) {
@@ -42,7 +43,8 @@ export function ObserverChip({ observer }: { observer: ObserverLocation }) {
       setGeoStatus("Enter a latitude within ±90 and a longitude within ±180.");
       return;
     }
-    navigateWithLocation(latitudeDeg, longitudeDeg);
+    applyObserverLocation(latitudeDeg, longitudeDeg, "saved");
+    setGeoStatus(null);
   };
 
   const useDeviceLocation = () => {
@@ -54,10 +56,11 @@ export function ObserverChip({ observer }: { observer: ObserverLocation }) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         // Coarse on purpose: ~1 km is plenty to orient the sky.
-        navigateWithLocation(
+        applyObserverLocation(
           roundCoarse(position.coords.latitude),
           roundCoarse(position.coords.longitude),
         );
+        setGeoStatus(null);
       },
       (error) => {
         setGeoStatus(
@@ -145,7 +148,7 @@ export function ObserverChip({ observer }: { observer: ObserverLocation }) {
           {geoStatus && <p className="location-status">{geoStatus}</p>}
           <p className="location-privacy">
             Your location stays in this browser, only to orient the sky and fetch close-up imagery
-            of your area from the map provider.
+            of your area from the map providers (Esri; NASA night lights).
           </p>
         </aside>
       )}

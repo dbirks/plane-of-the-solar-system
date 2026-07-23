@@ -68,5 +68,7 @@ test("settings dialog explains movement and offers compass mode where supported"
   await expect(dialog.getByText("How to move")).toBeVisible();
   await expect(dialog.getByText(/Drag/)).toBeVisible();
   // Headless Chromium reports DeviceOrientationEvent, so the section shows.
-  await expect(dialog.getByRole("button", { name: /Compass mode/ })).toBeVisible();
+  // Compass mode is a switch row like the guides (round 14).
+  await expect(dialog.getByRole("checkbox", { name: /Compass mode/ })).toBeAttached();
+  await expect(dialog.getByText("Aim your phone at the sky")).toBeVisible();
 });

@@ -4,10 +4,9 @@ import { type FeatureFlags, readFeatureFlags } from "./feature-flags";
 import { setActiveDistanceUnit, setGroundElevationM } from "../camera/distance-format";
 import { nearestLandmark } from "../camera/scale-domains";
 import { compassSupported } from "../location/compass-mode";
-import { locateAndGo } from "../location/locate";
+import { adoptGrantedLocationSilently, locateAndGo } from "../location/locate";
 import { nearestPlace } from "../location/nearest-place";
-import { resolveObserverLocation } from "../location/observer-location";
-import { togglePhoneLook } from "../location/phone-look";
+import { restorePhoneLook, togglePhoneLook } from "../location/phone-look";
 import { SpaceRenderer } from "../renderer/space-renderer";
 import { BodyInset } from "../ui/BodyInset";
 import { CompassRibbon } from "../ui/CompassRibbon";
@@ -20,15 +19,21 @@ import { SettingsDialog } from "../ui/SettingsDialog";
 import { useAppStore } from "./app-store";
 import { installWakeLock } from "./wake-lock";
 
-const observer = resolveObserverLocation(window.location.search, window.localStorage);
+const initialObserver = useAppStore.getState().observer;
 const flags: FeatureFlags = {
   ...readFeatureFlags(),
-  latitudeDeg: observer.latitudeDeg,
-  longitudeDeg: observer.longitudeDeg,
+  latitudeDeg: initialObserver.latitudeDeg,
+  longitudeDeg: initialObserver.longitudeDeg,
 };
 setActiveDistanceUnit(flags.distanceUnit);
-setGroundElevationM(nearestPlace(observer.latitudeDeg, observer.longitudeDeg)?.elevationM ?? 0);
 installWakeLock();
+// When geolocation was granted on an earlier visit, the opening sky adopts
+// the device's position silently (never prompting — ADR-0006); the scene
+// re-aims in place when it lands. Tilt likewise resumes where it was left.
+if (initialObserver.source === "timezone" || initialObserver.source === "fallback") {
+  adoptGrantedLocationSilently();
+}
+void restorePhoneLook();
 
 // The intro greets plain first visits; reproducible capture URLs (?time/?lat)
 // and returning visitors go straight to the sky.
@@ -39,28 +44,43 @@ function introDismissed(): boolean {
     return true;
   }
 }
-const showIntroInitially = !flags.hasExplicitTime && observer.source !== "url" && !introDismissed();
+const showIntroInitially =
+  !flags.hasExplicitTime && initialObserver.source !== "url" && !introDismissed();
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const rendererRef = useRef<SpaceRenderer | null>(null);
   const [rendererError, setRendererError] = useState<string | null>(null);
   const [showIntro, setShowIntro] = useState(showIntroInitially);
   const [showSettings, setShowSettings] = useState(false);
   const telemetry = useAppStore((state) => state.telemetry);
   const openingTargetLabel = useAppStore((state) => state.openingTargetLabel);
   const phoneLookActive = useAppStore((state) => state.phoneLookActive);
+  const observer = useAppStore((state) => state.observer);
   const currentLandmarkLabel = nearestLandmark(telemetry.currentDistanceM).label;
+  // Tilt belongs to the ground: off it the toggle stays ON but shows dormant.
+  const tiltDormant = phoneLookActive && telemetry.currentDistanceM > 60;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const spaceRenderer = new SpaceRenderer(canvas, flags, overlayRef.current);
+    rendererRef.current = spaceRenderer;
     void spaceRenderer.initialize().catch((error: unknown) => {
       setRendererError(error instanceof Error ? error.message : "Renderer unavailable");
     });
-    return () => spaceRenderer.dispose();
+    return () => {
+      rendererRef.current = null;
+      spaceRenderer.dispose();
+    };
   }, []);
+
+  // Location changes re-aim the running scene — never a page reload.
+  useEffect(() => {
+    setGroundElevationM(nearestPlace(observer.latitudeDeg, observer.longitudeDeg)?.elevationM ?? 0);
+    rendererRef.current?.setObserverLocation(observer.latitudeDeg, observer.longitudeDeg);
+  }, [observer.latitudeDeg, observer.longitudeDeg]);
 
   return (
     <main className="experience-shell">
@@ -106,8 +126,14 @@ export function App() {
           {compassSupported() && (
             <button
               type="button"
-              className={`quiet-button icon-button${phoneLookActive ? " icon-button--active" : ""}`}
-              aria-label={phoneLookActive ? "Compass mode on" : "Compass mode"}
+              className={`quiet-button icon-button${phoneLookActive ? " icon-button--active" : ""}${tiltDormant ? " icon-button--dormant" : ""}`}
+              aria-label={
+                tiltDormant
+                  ? "Compass mode on, paused above the ground"
+                  : phoneLookActive
+                    ? "Compass mode on"
+                    : "Compass mode"
+              }
               aria-pressed={phoneLookActive}
               onClick={() => void togglePhoneLook()}
             >
@@ -161,12 +187,12 @@ export function App() {
         </div>
       </header>
 
-      <ObserverChip observer={observer} />
+      <ObserverChip key={`${observer.latitudeDeg},${observer.longitudeDeg}`} observer={observer} />
 
       <CompassRibbon />
       <ScaleSlider />
       <span id="imagery-credit" className="imagery-credit" style={{ visibility: "hidden" }}>
-        Imagery © Esri, Maxar, Earthstar Geographics
+        Imagery © Esri, Maxar, Earthstar Geographics · Night: NASA VIIRS
       </span>
       <MoonInset />
       <BodyInset />

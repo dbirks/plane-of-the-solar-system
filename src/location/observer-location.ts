@@ -6,7 +6,7 @@
  * separate, user-initiated action in the location picker.
  */
 
-export type ObserverSource = "url" | "saved" | "timezone" | "fallback";
+export type ObserverSource = "url" | "saved" | "timezone" | "fallback" | "device";
 
 export type ObserverLocation = {
   latitudeDeg: number;
