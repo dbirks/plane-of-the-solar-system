@@ -25,7 +25,7 @@ import {
 describe("logarithmic journey scale", () => {
   it("maps both endpoints exactly", () => {
     expect(sliderToDistance(0)).toBeCloseTo(2, 12);
-    expect(sliderToDistance(1)).toBeCloseTo(12_000_000_000_000, 1);
+    expect(sliderToDistance(1)).toBeCloseTo(15_000_000_000_000, 1);
   });
 
   it("round-trips values", () => {
@@ -44,7 +44,7 @@ describe("logarithmic journey scale", () => {
     expect(JOURNEY_LANDMARKS).toHaveLength(5);
     expect(JOURNEY_LANDMARKS.at(-1)).toMatchObject({
       id: "full-system",
-      distanceM: 12_000_000_000_000,
+      distanceM: 15_000_000_000_000,
     });
   });
 
@@ -189,7 +189,7 @@ describe("near plane vs. depth precision", () => {
   });
 
   it("never reaches the camera-anchored sky shell", () => {
-    expect(nearPlaneRenderUnitsForAltitude(12_000_000_000_000)).toBeLessThan(1_300);
+    expect(nearPlaneRenderUnitsForAltitude(15_000_000_000_000)).toBeLessThan(1_300);
     expect(nearPlaneRenderUnitsForAltitude(2)).toBeGreaterThanOrEqual(0.00001);
   });
 });

@@ -157,14 +157,15 @@ input:focus-visible {
   opacity: 0.6;
 }
 
-/* Inset close buttons: a modest circle with a BIG × — the glyph is what
-   was too small all along; a 60px circle read as comically huge. */
+/* Inset close buttons: a modest circle with a BIG × — an inline SVG cross,
+   because the text glyph's ink never scaled with the button. */
 .inset-close {
-  width: 44px;
-  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   padding: 0;
-  font-size: 2.1rem;
-  line-height: 1;
 }
 
 .backend-pill {
@@ -532,6 +533,13 @@ input:focus-visible {
 .landmark-labels {
   position: absolute;
   inset: 0 49px 0 0;
+  /* The panel spans left of the rail — only the label BUTTONS take taps;
+     the space between them belongs to the canvas (drag/orbit). */
+  pointer-events: none;
+}
+
+.landmark-labels button {
+  pointer-events: auto;
 }
 
 .landmark-labels button {
@@ -662,8 +670,11 @@ input:focus-visible {
   z-index: 2;
   top: 18px;
   right: 18px;
-  width: 56px;
-  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
   padding: 0;
   border: 1px solid rgb(180 225 228 / 0.28);
   border-radius: 999px;

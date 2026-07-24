@@ -918,8 +918,7 @@ export class SpaceRenderer {
     // reveal, from a few hundred meters) — "that is where I am standing"
     // anchors the journey — and retires on the way to the Earth–Moon
     // landmark, where "where exactly on the ball" stops mattering.
-    const markerReveal =
-      smoothstep(200, 1_500, altitudeM) * (1 - smoothstep(1.2e8, 4e8, altitudeM));
+    const markerReveal = smoothstep(120, 500, altitudeM) * (1 - smoothstep(1.2e8, 4e8, altitudeM));
     const markerDistanceRender = observerSurfaceRender.length();
     // Fixed floor capped ANGULARLY: at map altitudes an absolute floor made
     // the dot (and its dark rim) a huge disc over the imagery.
@@ -940,8 +939,10 @@ export class SpaceRenderer {
     for (const mesh of [this.objects.observerMarker, ...this.objects.observerMarker.children]) {
       const markerMaterial = (mesh as THREE.Mesh).material as THREE.MeshBasicMaterial;
       markerMaterial.transparent = true;
-      // The outer halo stays translucent — a glow, not a bigger dot.
-      markerMaterial.opacity = mesh.name === "observer-glow" ? 0.9 * markerReveal : markerReveal;
+      // The outer halo stays translucent — a glow, not a bigger dot — and
+      // follows reveal² so the big soft haze never precedes the dot itself.
+      markerMaterial.opacity =
+        mesh.name === "observer-glow" ? 0.9 * markerReveal * markerReveal : markerReveal;
     }
 
     const atmosphereExit = smoothstep(45_000, 450_000, altitudeM);
@@ -1186,7 +1187,9 @@ export class SpaceRenderer {
     // depth precision is unchanged. Everything beyond the default far is
     // transparent while systemReveal is 0, so the gate itself is invisible.
     const plutoAphelionM = 7.38e12;
-    const orbitFarUnits = plutoAphelionM * renderUnitsPerMeter * 1.15;
+    // Altitude joins the stretch: at 100 AU out, the orbit's far side lies
+    // ~150 AU from the camera — an Earth-anchored constant alone clips it.
+    const orbitFarUnits = (plutoAphelionM + altitudeM) * renderUnitsPerMeter * 1.15;
     // Altitude-riding near plane: the standard depth buffer cannot carry a
     // fixed tiny near up the journey (see nearPlaneRenderUnitsForAltitude).
     const nearFloorUnits = nearPlaneRenderUnitsForAltitude(altitudeM);
@@ -1307,7 +1310,14 @@ export class SpaceRenderer {
         ) *
           180) /
         Math.PI;
-      this.planeGuideAnchors = [0, 60, -60, 120, -120, 180].map((offsetDeg) => ({
+      // While the globe still fills the center, the lead caption SLIDES
+      // along the band just far enough to clear the occluder (the band's
+      // ~8.5° lift is part of the separation), easing to dead-center as the
+      // planet shrinks — it never blinks out mid-journey.
+      const occluderRadiusDeg =
+        (Math.asin(EARTH_MEAN_RADIUS_M / (EARTH_MEAN_RADIUS_M + altitudeM)) * 180) / Math.PI;
+      const slideDeg = Math.sqrt(Math.max(0, (occluderRadiusDeg + 3) ** 2 - 8.5 ** 2));
+      this.planeGuideAnchors = [slideDeg, 60, -60, 120, -120, 180].map((offsetDeg) => ({
         direction: rotateEqjToLocal(
           this.skyState!.eqjToLocalThree,
           eclipticDirectionEqj(gazeLongitudeDeg + offsetDeg) as Vec3d,

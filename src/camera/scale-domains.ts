@@ -10,9 +10,9 @@ export type ScaleLandmark = {
 };
 
 export const JOURNEY_MIN_DISTANCE_M = 2;
-// ~80 AU: far enough that Pluto's whole orbit (aphelion 49 AU) sits inside
-// the final frame with margin.
-export const JOURNEY_MAX_DISTANCE_M = 12_000_000_000_000;
+// ~100 AU: Pluto's whole orbit (aphelion 49 AU) sits inside the final frame
+// with generous margin — the user asked for a little more room past 80 AU.
+export const JOURNEY_MAX_DISTANCE_M = 15_000_000_000_000;
 
 // Ground goes straight to whole Earth — the atmosphere and low-orbit stops
 // carried nothing actionable, so they are gone from the rail entirely and

@@ -18,7 +18,7 @@ test("journey reaches the full solar system in the heliocentric domain", async (
   await page.getByRole("button", { name: "Solar system" }).click();
   await expect(page.getByRole("slider", { name: "Distance from the ground" })).toHaveAttribute(
     "aria-valuetext",
-    "Distance from Earth · 80 AU",
+    "Distance from Earth · 100 AU",
   );
   await expect
     .poll(
