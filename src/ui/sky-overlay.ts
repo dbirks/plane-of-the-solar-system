@@ -355,7 +355,9 @@ export class SkyOverlay {
           anchor.direction[1] * occluder.direction[1] +
           anchor.direction[2] * occluder.direction[2];
         const separationDeg = (Math.acos(Math.min(1, Math.max(-1, facing))) * 180) / Math.PI;
-        if (separationDeg < occluder.apparentRadiusDeg + 6) {
+        // Tight margin (+2°): the centered caption rides only ~8.5° above
+        // the globe's center — a fat margin kept it hidden far too long.
+        if (separationDeg < occluder.apparentRadiusDeg + 2) {
           caption.style.display = "none";
           continue;
         }

@@ -227,10 +227,12 @@ function createSceneObjects(
       glowSize / 2,
       glowSize / 2,
     );
-    gradient.addColorStop(0, "rgba(214, 232, 255, 0.95)");
-    gradient.addColorStop(0.3, "rgba(168, 202, 255, 0.55)");
-    gradient.addColorStop(0.65, "rgba(140, 180, 255, 0.16)");
-    gradient.addColorStop(1, "rgba(140, 180, 255, 0)");
+    // Light BLUE throughout — a near-white core read as a white rim around
+    // the dot on-device.
+    gradient.addColorStop(0, "rgba(178, 208, 255, 0.9)");
+    gradient.addColorStop(0.3, "rgba(148, 188, 255, 0.5)");
+    gradient.addColorStop(0.65, "rgba(126, 172, 255, 0.14)");
+    gradient.addColorStop(1, "rgba(126, 172, 255, 0)");
     glowContext.fillStyle = gradient;
     glowContext.fillRect(0, 0, glowSize, glowSize);
   }
@@ -917,7 +919,7 @@ export class SpaceRenderer {
     // anchors the journey — and retires on the way to the Earth–Moon
     // landmark, where "where exactly on the ball" stops mattering.
     const markerReveal =
-      smoothstep(250, 4_000, altitudeM) * (1 - smoothstep(1.2e8, 4e8, altitudeM));
+      smoothstep(200, 1_500, altitudeM) * (1 - smoothstep(1.2e8, 4e8, altitudeM));
     const markerDistanceRender = observerSurfaceRender.length();
     // Fixed floor capped ANGULARLY: at map altitudes an absolute floor made
     // the dot (and its dark rim) a huge disc over the imagery.
@@ -963,10 +965,12 @@ export class SpaceRenderer {
       orbitLines: layers["orbit-lines"],
     });
     // Satellite imagery is below its native resolution close up — hold the
-    // stylized surface until the imagery patches have fully handed off
-    // (1.2e6 m): releasing earlier double-exposed the globe's city lights
-    // under the VIIRS patch lights, and the misregistered pair "moved".
-    this.surfaceFlattenUniform.value = 1 - smoothstep(1_200_000, 4_000_000, altitudeM);
+    // stylized surface, then release it ACROSS the imagery fade-out so the
+    // globe's textures (city lights included) arrive exactly as the patches
+    // leave. A sequential handoff left a near-invisible dark ball at night
+    // around 700–1,000 mi; overlapping is safe now that the patches live in
+    // mercator meters and register with the globe at the observer.
+    this.surfaceFlattenUniform.value = 1 - smoothstep(400_000, 1_200_000, altitudeM);
 
     const continentReveal = smoothstep(0.3, 0.82, normalizedScale);
     this.objects.continentOutlines.visible = continentReveal > 0.001;
@@ -1289,10 +1293,12 @@ export class SpaceRenderer {
       });
     }
     // Out in space the captions follow the FRAME, not fixed ecliptic
-    // longitudes: anchors flank the gaze's own ecliptic longitude so
-    // "Plane of the solar system" reads centered beside the globe as you
-    // pull out, wherever on Earth (and whenever) you started. The ground
-    // sky keeps the astronomy-tick anchors.
+    // longitudes: ONE caption sits at the gaze's own ecliptic longitude —
+    // dead-center over the globe on the band (the ~8.5° north lift holds it
+    // clear of the planet from ~30,000 mi out; nearer in, the occluder
+    // simply hides it until there is room). The rest space out at 60° as
+    // the repeats around the ring. The ground sky keeps astronomy-tick
+    // anchors.
     if (revealBlend > 0.01 && this.skyState) {
       const gazeLongitudeDeg =
         (Math.atan2(
@@ -1301,35 +1307,7 @@ export class SpaceRenderer {
         ) *
           180) /
         Math.PI;
-      // Flank angle fitted to the moment: inside the camera's horizontal
-      // half-FOV (a portrait phone frames barely ±20°) but clear of the
-      // globe's caption occluder, so the words sit visible beside the ball
-      // and drift toward center as the planet shrinks.
-      const horizontalHalfFovDeg = THREE.MathUtils.radToDeg(
-        Math.atan(
-          Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) *
-            Math.max(0.3, this.camera.aspect),
-        ),
-      );
-      // The band rides ~8.5° above the gaze (REVEAL_NORTH_LIFT), so the
-      // horizontal clearance past the occluder is smaller than the full
-      // angular clearance — captions tuck in closer to center.
-      const occluderRadiusDeg =
-        (Math.asin(EARTH_MEAN_RADIUS_M / (EARTH_MEAN_RADIUS_M + altitudeM)) * 180) / Math.PI;
-      const clearanceDeg = Math.sqrt(Math.max(0, (occluderRadiusDeg + 7) ** 2 - 8.5 ** 2));
-      // Resting flank ≥ 14°: the two flanking captions are each ~17° of
-      // text on a phone — any closer to center and they run together. The
-      // occluder clearance always wins so the words never sit on the globe.
-      const restingFlankDeg = Math.max(14, Math.min(26, horizontalHalfFovDeg * 0.5));
-      const flankDeg = Math.max(clearanceDeg, restingFlankDeg);
-      this.planeGuideAnchors = [
-        flankDeg,
-        -flankDeg,
-        flankDeg + 60,
-        -(flankDeg + 60),
-        flankDeg + 120,
-        -(flankDeg + 120),
-      ].map((offsetDeg) => ({
+      this.planeGuideAnchors = [0, 60, -60, 120, -120, 180].map((offsetDeg) => ({
         direction: rotateEqjToLocal(
           this.skyState!.eqjToLocalThree,
           eclipticDirectionEqj(gazeLongitudeDeg + offsetDeg) as Vec3d,

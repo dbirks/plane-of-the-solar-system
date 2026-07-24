@@ -99,12 +99,15 @@ export function nadirBlendForAltitude(altitudeM: number): number {
  * two the journey has a pure-zoom BALL beat — the camera keeps backing
  * straight out along the observer's zenith, the ground curls into a complete
  * ball dead-center with the glowing dot facing the camera ("you live on the
- * side of it"), and only THEN does the frame swing and roll onto the plane.
- * Same smootherstep, still settled exactly at whole Earth.
+ * side of it"), and only THEN does the frame swing and roll onto the plane,
+ * settling a little past the whole-Earth landmark (~20,000 mi).
  */
 export function vantageSwingBlendForAltitude(altitudeM: number): number {
+  // Stretched past whole Earth (to ~32,000 km ≈ 20,000 mi): the swing over
+  // 6.9→7.3 read as abrupt on-device — "make the sliding-away motion less
+  // abrupt, maybe out to twenty thousand [miles]".
   const logAltitude = Math.log10(Math.max(1, altitudeM));
-  const t = Math.min(1, Math.max(0, (logAltitude - 6.9) / (7.3 - 6.9)));
+  const t = Math.min(1, Math.max(0, (logAltitude - 6.9) / (7.5 - 6.9)));
   return t * t * t * (t * (t * 6 - 15) + 10);
 }
 

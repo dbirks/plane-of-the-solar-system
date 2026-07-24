@@ -353,14 +353,31 @@ export class SkyLayer {
     this.moonOrbitGuide.frustumCulled = false;
     this.moonOrbitGuide.visible = false;
 
+    // The sun line fades along its length — it should SUGGEST the direction
+    // ("that way to the Sun"), not draw a hard bar across the whole frame.
     const sunGuideMaterial = new THREE.LineBasicMaterial({
-      color: 0xf5c977,
+      vertexColors: true,
       transparent: true,
       opacity: 0,
       depthWrite: false,
     });
     const sunGuideGeometry = new THREE.BufferGeometry();
-    sunGuideGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
+    sunGuideGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(SUN_GUIDE_SEGMENTS * 6), 3),
+    );
+    const sunGuideColors = new Float32Array(SUN_GUIDE_SEGMENTS * 6);
+    for (let segment = 0; segment < SUN_GUIDE_SEGMENTS; segment += 1) {
+      for (let end = 0; end < 2; end += 1) {
+        const t = (segment + end) / SUN_GUIDE_SEGMENTS;
+        const brightness = (1 - t) ** 2;
+        const base = segment * 6 + end * 3;
+        sunGuideColors[base] = 0.961 * brightness;
+        sunGuideColors[base + 1] = 0.788 * brightness;
+        sunGuideColors[base + 2] = 0.467 * brightness;
+      }
+    }
+    sunGuideGeometry.setAttribute("color", new THREE.BufferAttribute(sunGuideColors, 3));
     this.sunDirectionGuide = new THREE.LineSegments(sunGuideGeometry, sunGuideMaterial);
     this.sunDirectionGuide.renderOrder = -4;
     this.sunDirectionGuide.frustumCulled = false;
@@ -564,13 +581,12 @@ export class SkyLayer {
     ) as THREE.BufferAttribute;
     const [sunX, sunY, sunZ] = sky.sun.directionLocalThree;
     const sunGuideLengthM = 60_000_000;
-    sunGuidePositions.setXYZ(0, 0, 0, 0);
-    sunGuidePositions.setXYZ(
-      1,
-      sunX * sunGuideLengthM,
-      sunY * sunGuideLengthM,
-      sunZ * sunGuideLengthM,
-    );
+    for (let segment = 0; segment < SUN_GUIDE_SEGMENTS; segment += 1) {
+      for (let end = 0; end < 2; end += 1) {
+        const t = ((segment + end) / SUN_GUIDE_SEGMENTS) * sunGuideLengthM;
+        sunGuidePositions.setXYZ(segment * 2 + end, sunX * t, sunY * t, sunZ * t);
+      }
+    }
     sunGuidePositions.needsUpdate = true;
 
     // Planets: positions, brightness, and warm/cool tints by magnitude.
@@ -827,6 +843,9 @@ export class SkyLayer {
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
+
+/** Segments in the sun-direction guide — enough for a smooth length fade. */
+const SUN_GUIDE_SEGMENTS = 12;
 
 function smoothstepNumber(edge0: number, edge1: number, value: number): number {
   const t = clamp01((value - edge0) / (edge1 - edge0));
