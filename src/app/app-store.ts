@@ -30,6 +30,9 @@ export type RendererTelemetry = {
 export type SkyReadout = {
   sunAltitudeDeg: number;
   sunAzimuthDeg: number;
+  /** Highest altitude the ecliptic band reaches over the horizon right now —
+   * surfaced so "the band looks too low" is answerable with a number. */
+  eclipticPeakAltitudeDeg: number;
   moonAltitudeDeg: number;
   moonAzimuthDeg: number;
   moonIlluminatedFraction: number;

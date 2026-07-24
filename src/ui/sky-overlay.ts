@@ -155,11 +155,14 @@ export class SkyOverlay {
     if (width > 0 && height > 0) {
       for (const entry of this.markers.values()) {
         const isMoon = entry.body.id === "moon";
+        const isSun = entry.body.id === "sun";
         const override = overrides?.get(entry.body.id);
         const ghosted = entry.element.classList.contains("sky-marker--ghost");
-        // The Moon's marker persists (physical body); other markers show at
-        // ground scale as sky proxies and again at system scale. Earth only
-        // exists at system scale (there is no Earth in Earth's sky).
+        // The Moon's and Sun's markers persist (physical anchors at every
+        // scale — the Sun override arrives past the proxy fade); other
+        // markers show at ground scale as sky proxies and again at system
+        // scale. Earth only exists at system scale (there is no Earth in
+        // Earth's sky).
         let opacity =
           entry.body.id === "earth"
             ? override
@@ -167,7 +170,9 @@ export class SkyOverlay {
               : 0
             : isMoon
               ? 1
-              : Math.max(proxyOpacity, override ? systemReveal : 0);
+              : isSun
+                ? Math.max(proxyOpacity, override ? 1 : 0)
+                : Math.max(proxyOpacity, override ? systemReveal : 0);
         if (ghosted && !prefs.belowHorizon) opacity = 0;
         if (opacity <= 0.02) {
           entry.visible = false;

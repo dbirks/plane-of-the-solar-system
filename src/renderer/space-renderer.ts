@@ -213,7 +213,7 @@ function createSceneObjects(
     new THREE.MeshBasicMaterial({ color: 0x1d5bd8, transparent: true, opacity: 0 }),
   );
   const observerMarkerRim = new THREE.Mesh(
-    new THREE.SphereGeometry(1.45, 32, 16),
+    new THREE.SphereGeometry(1.6, 32, 16),
     new THREE.MeshBasicMaterial({
       color: 0xf4f8ff,
       side: THREE.BackSide,
@@ -223,6 +223,20 @@ function createSceneObjects(
     }),
   );
   observerMarker.add(observerMarkerRim);
+  // A soft outer halo makes the dot findable at a glance mid-pull-out,
+  // against bright imagery and dark night ground alike.
+  const observerMarkerHalo = new THREE.Mesh(
+    new THREE.SphereGeometry(2.6, 32, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0x7fa8ff,
+      side: THREE.BackSide,
+      depthWrite: false,
+      transparent: true,
+      opacity: 0,
+    }),
+  );
+  observerMarkerHalo.name = "observer-halo";
+  observerMarker.add(observerMarkerHalo);
 
   const coordinateGrid = createCoordinateGrid();
   const continentOutlines = createContinentOutlines(observerLatitudeDeg, observerLongitudeDeg);
@@ -528,8 +542,11 @@ export class SpaceRenderer {
       }
       if (event.pointerId !== this.pointerId) return;
       // While tilt navigation drives the camera, a stray finger must not
-      // fight it — dragging pauses (pinch travel above still works).
-      if (useAppStore.getState().phoneLookActive) return;
+      // fight it — dragging pauses (pinch travel above still works). Tilt
+      // only drives ON THE GROUND: off it, the finger owns the view again.
+      if (useAppStore.getState().phoneLookActive && Math.exp(this.distanceSpring.value) <= 60) {
+        return;
+      }
       const sensitivity = 0.004;
       this.yawOffset -= (event.clientX - this.lastPointer.x) * sensitivity;
       this.pitchOffset -= (event.clientY - this.lastPointer.y) * sensitivity;
@@ -656,9 +673,23 @@ export class SpaceRenderer {
       ),
     }));
 
+    // The band's highest point over the horizon (real diurnal astronomy:
+    // ~30° on July evenings at 40°N, ~74° at midday) — published so the UI
+    // can SAY it rather than leave a low band looking like a location bug.
+    let eclipticPeakAltitudeDeg = -90;
+    for (let longitudeDeg = 0; longitudeDeg < 360; longitudeDeg += 5) {
+      const direction = rotateEqjToLocal(
+        sky.eqjToLocalThree,
+        eclipticDirectionEqj(longitudeDeg) as Vec3d,
+      );
+      const altitudeDeg = (Math.asin(Math.min(1, Math.max(-1, direction[1]))) * 180) / Math.PI;
+      if (altitudeDeg > eclipticPeakAltitudeDeg) eclipticPeakAltitudeDeg = altitudeDeg;
+    }
+
     useAppStore.getState().setSkyReadout({
       sunAltitudeDeg: sky.sun.altitudeDeg,
       sunAzimuthDeg: sky.sun.azimuthDeg,
+      eclipticPeakAltitudeDeg,
       moonAltitudeDeg: sky.moon.altitudeDeg,
       moonAzimuthDeg: sky.moon.azimuthDeg,
       moonIlluminatedFraction: sky.moon.illuminatedFraction,
@@ -865,7 +896,7 @@ export class SpaceRenderer {
     // the dot (and its dark rim) a huge disc over the imagery.
     const markerSize = Math.max(
       Math.min(0.002, markerDistanceRender * 0.02),
-      markerDistanceRender * 0.006,
+      markerDistanceRender * 0.009,
     );
     // Sit clearly ABOVE the imagery quads (they float up to ~10 m over the
     // ground): with the sphere half-buried, transparent sort order against
@@ -878,7 +909,8 @@ export class SpaceRenderer {
     for (const mesh of [this.objects.observerMarker, ...this.objects.observerMarker.children]) {
       const markerMaterial = (mesh as THREE.Mesh).material as THREE.MeshBasicMaterial;
       markerMaterial.transparent = true;
-      markerMaterial.opacity = markerReveal;
+      // The outer halo stays translucent — a glow, not a bigger dot.
+      markerMaterial.opacity = mesh.name === "observer-halo" ? 0.38 * markerReveal : markerReveal;
     }
 
     const atmosphereExit = smoothstep(45_000, 450_000, altitudeM);
@@ -903,8 +935,10 @@ export class SpaceRenderer {
       eclipticRings: layers["ecliptic-rings"],
     });
     // Satellite imagery is below its native resolution close up — hold the
-    // stylized surface until between low orbit and whole Earth.
-    this.surfaceFlattenUniform.value = 1 - smoothstep(800_000, 3_000_000, altitudeM);
+    // stylized surface until the imagery patches have fully handed off
+    // (1.2e6 m): releasing earlier double-exposed the globe's city lights
+    // under the VIIRS patch lights, and the misregistered pair "moved".
+    this.surfaceFlattenUniform.value = 1 - smoothstep(1_200_000, 4_000_000, altitudeM);
 
     const continentReveal = smoothstep(0.3, 0.82, normalizedScale);
     this.objects.continentOutlines.visible = continentReveal > 0.001;
@@ -1178,6 +1212,21 @@ export class SpaceRenderer {
         physical: this.moonPlacement.physical,
         apparentRadiusDeg: apparentRadiusDeg(MOON_RADIUS_M, this.moonPlacement.cameraDistanceM),
       });
+    }
+    // The Sun's marker never retires: like the Moon it is a physical anchor
+    // ("which way is the Sun from here") at every scale. From past the sky
+    // proxies' fade the override carries it at the true geocentric direction.
+    if (systemReveal <= 0 && altitudeM > 200_000) {
+      const sunGeoLocalM = this.bodyGeoLocalM.get("sun");
+      if (sunGeoLocalM) {
+        const { ray, distanceM } = this.rayFromGeoLocal(sunGeoLocalM, altitudeM);
+        overrides.set("sun", {
+          directionLocalThree: ray,
+          ...rayToAltAzDeg(ray),
+          physical: true,
+          apparentRadiusDeg: apparentRadiusDeg(this.bodyRadiusM.get("sun") ?? 0, distanceM),
+        });
+      }
     }
     if (systemReveal > 0) {
       for (const [bodyId, geoLocalM] of this.bodyGeoLocalM) {

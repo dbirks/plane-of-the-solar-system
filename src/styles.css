@@ -145,14 +145,16 @@ input:focus-visible {
   box-shadow: 0 0 12px rgb(91 155 255 / 0.25);
 }
 
-/* Tilt stays ON but doesn't apply off the ground: the toggle keeps its
-   state and shows dormant — dotted outline, dimmed — until you land. */
-.icon-button--dormant {
+/* Tilt is a ground instrument: off the ground the button is plainly OFF —
+   gray, dashed, and not clickable. The remembered choice returns on landing. */
+.icon-button--dormant,
+.icon-button--dormant:hover {
   border-style: dashed;
-  border-color: rgb(91 155 255 / 0.4);
-  color: rgb(143 188 255 / 0.55);
+  border-color: rgb(160 178 186 / 0.3);
+  color: rgb(169 200 202 / 0.4);
   box-shadow: none;
-  opacity: 0.75;
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* Inset close buttons: thumb-sized — small ×s kept getting missed. */

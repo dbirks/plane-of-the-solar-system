@@ -59,8 +59,10 @@ export function App() {
   const phoneLookActive = useAppStore((state) => state.phoneLookActive);
   const observer = useAppStore((state) => state.observer);
   const currentLandmarkLabel = nearestLandmark(telemetry.currentDistanceM).label;
-  // Tilt belongs to the ground: off it the toggle stays ON but shows dormant.
-  const tiltDormant = phoneLookActive && telemetry.currentDistanceM > 60;
+  // Tilt belongs to the ground: off it the button is plainly OFF — gray and
+  // not toggleable — and the finger owns the view. The remembered choice
+  // re-engages on landing.
+  const tiltUnavailable = telemetry.currentDistanceM > 60;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -126,15 +128,10 @@ export function App() {
           {compassSupported() && (
             <button
               type="button"
-              className={`quiet-button icon-button${phoneLookActive ? " icon-button--active" : ""}${tiltDormant ? " icon-button--dormant" : ""}`}
-              aria-label={
-                tiltDormant
-                  ? "Compass mode on, paused above the ground"
-                  : phoneLookActive
-                    ? "Compass mode on"
-                    : "Compass mode"
-              }
-              aria-pressed={phoneLookActive}
+              className={`quiet-button icon-button${phoneLookActive && !tiltUnavailable ? " icon-button--active" : ""}${tiltUnavailable ? " icon-button--dormant" : ""}`}
+              aria-label={tiltUnavailable ? "Compass mode (ground only)" : "Compass mode"}
+              aria-pressed={phoneLookActive && !tiltUnavailable}
+              disabled={tiltUnavailable}
               onClick={() => void togglePhoneLook()}
             >
               {/* Lucide "smartphone" with motion arcs — tilt navigation. */}

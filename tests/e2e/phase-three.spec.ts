@@ -66,16 +66,19 @@ test("the Moon's marker remains selectable at system scale and opens the inset",
   await expect(inset).not.toBeVisible();
 });
 
-test("sky-proxy markers fade at system scale while the Moon's persists", async ({ page }) => {
+test("sky-proxy markers fade at system scale while the Moon's and Sun's persist", async ({
+  page,
+}) => {
   test.setTimeout(75_000);
   await page.goto(moonScenario);
   await page.getByRole("button", { name: "Earth–Moon" }).click();
   const moonMarker = page.locator(".sky-marker[data-body=moon]");
-  const sunMarker = page.locator(".sky-marker[data-body=sun]");
+  const jupiterMarker = page.locator(".sky-marker[data-body=jupiter]");
   await expect
-    .poll(async () => sunMarker.evaluate((element) => element.style.display), {
+    .poll(async () => jupiterMarker.evaluate((element) => element.style.display), {
       timeout: 20_000,
     })
     .toBe("none");
   await expect(moonMarker).toBeVisible();
+  await expect(page.locator(".sky-marker[data-body=sun]")).toBeVisible();
 });

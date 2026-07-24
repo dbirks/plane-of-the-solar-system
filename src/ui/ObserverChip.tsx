@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { useAppStore } from "../app/app-store";
 import { applyObserverLocation, roundCoarse } from "../location/locate";
 import { nearestPlace } from "../location/nearest-place";
 import {
@@ -18,6 +19,7 @@ const SOURCE_HINTS: Record<ObserverLocation["source"], string> = {
 
 export function ObserverChip({ observer }: { observer: ObserverLocation }) {
   const [open, setOpen] = useState(false);
+  const skyReadout = useAppStore((state) => state.skyReadout);
   const [latitudeInput, setLatitudeInput] = useState(observer.latitudeDeg.toFixed(4));
   const [longitudeInput, setLongitudeInput] = useState(observer.longitudeDeg.toFixed(4));
   const [geoStatus, setGeoStatus] = useState<string | null>(null);
@@ -99,6 +101,13 @@ export function ObserverChip({ observer }: { observer: ObserverLocation }) {
         <aside className="location-panel" aria-label="Observer location">
           <span className="eyebrow">Where you are</span>
           <p className="location-hint">{SOURCE_HINTS[observer.source]}</p>
+          {skyReadout && (
+            <p className="location-hint">
+              From here, right now, the plane of the solar system arcs up to{" "}
+              {Math.round(skyReadout.eclipticPeakAltitudeDeg)}° above the horizon. It rides low on
+              summer evenings and high at midday — the Sun always sits on it.
+            </p>
+          )}
           <div className="location-actions">
             <button type="button" className="quiet-button" onClick={useDeviceLocation}>
               Use my location
