@@ -1,19 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAppStore } from "../app/app-store";
-import { formatDistance, formatDistanceParts } from "../camera/distance-format";
+import { formatDistance } from "../camera/distance-format";
 import {
   applySoftLandmarkAttraction,
   distanceToSlider,
   JOURNEY_LANDMARKS,
-  nearestLandmark,
   sliderToDistance,
 } from "../camera/scale-domains";
 
 export function ScaleSlider() {
   const targetDistanceM = useAppStore((state) => state.targetDistanceM);
   const setTargetDistanceM = useAppStore((state) => state.setTargetDistanceM);
-  const currentDistanceM = useAppStore((state) => state.telemetry.currentDistanceM);
   const normalizedTarget = distanceToSlider(targetDistanceM);
 
   // Landmark labels surface only while actively traveling (or hovering the
@@ -29,8 +27,6 @@ export function ScaleSlider() {
     };
   }, [targetDistanceM]);
 
-  const currentLandmark = useMemo(() => nearestLandmark(currentDistanceM), [currentDistanceM]);
-
   const updateScale = (normalized: number, attract: boolean) => {
     const adjusted = attract ? applySoftLandmarkAttraction(normalized) : normalized;
     setTargetDistanceM(sliderToDistance(adjusted));
@@ -41,15 +37,6 @@ export function ScaleSlider() {
       className={`scale-control${railActive ? " scale-control--active" : ""}`}
       aria-label="Journey scale"
     >
-      <div className="scale-readout" aria-live="polite">
-        <span className="eyebrow">{currentLandmark.label}</span>
-        {/* The renderer refreshes the value span every frame by id; the
-            label span holds still so the line doesn't vibrate. */}
-        <strong className="scale-readout-line">
-          <span id="scale-readout-label">{formatDistanceParts(currentDistanceM).label}</span>
-          <span id="scale-readout-value">{formatDistanceParts(currentDistanceM).value}</span>
-        </strong>
-      </div>
       <div className="slider-assembly">
         <input
           className="vertical-slider"

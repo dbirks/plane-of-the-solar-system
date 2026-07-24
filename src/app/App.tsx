@@ -97,9 +97,11 @@ export function App() {
         <div>
           <span className="brand-kicker">Plane of the solar system</span>
           <h1>{currentLandmarkLabel}</h1>
+          {/* The renderer owns this span's text (per-frame by id): the bare
+              distance/altitude value — the words are understood. */}
+          <span id="scale-readout-value" className="header-distance" />
         </div>
         <div className="header-actions">
-          <span className="backend-pill">{telemetry.backend}</span>
           <button
             type="button"
             className="quiet-button icon-button"

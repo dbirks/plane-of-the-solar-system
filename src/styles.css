@@ -64,14 +64,13 @@ input:focus-visible {
   cursor: grabbing;
 }
 
+/* Bottom vignette only — the old circular side-glow read as an artifact. */
 .sky-glow {
   position: absolute;
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 22% 32%, rgb(125 208 214 / 0.13), transparent 29%),
-    linear-gradient(180deg, transparent 40%, rgb(5 24 30 / 0.24) 68%, rgb(0 3 8 / 0.46));
+  background: linear-gradient(180deg, transparent 40%, rgb(5 24 30 / 0.24) 68%, rgb(0 3 8 / 0.46));
   mix-blend-mode: screen;
 }
 
@@ -109,6 +108,19 @@ input:focus-visible {
   text-shadow: 0 2px 24px rgb(0 0 0 / 0.35);
 }
 
+/* The bare distance/altitude value under the title — sans-serif; the words
+   ("Altitude", "Distance from Earth") are understood and gone. Only the
+   serif h1 above keeps its face. */
+.header-distance {
+  display: block;
+  margin-top: 8px;
+  color: #b9d2d4;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+  text-shadow: 0 1px 12px rgb(0 0 0 / 0.4);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -116,7 +128,6 @@ input:focus-visible {
   pointer-events: auto;
 }
 
-.backend-pill,
 .quiet-button {
   border: 1px solid rgb(180 225 228 / 0.22);
   border-radius: 999px;
@@ -166,14 +177,6 @@ input:focus-visible {
   width: 40px;
   height: 40px;
   padding: 0;
-}
-
-.backend-pill {
-  padding: 8px 12px;
-  color: #a9c8ca;
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .quiet-button {
@@ -410,40 +413,6 @@ input:focus-visible {
   align-items: center;
   gap: 22px;
   transform: translateY(-50%);
-}
-
-.scale-readout {
-  position: absolute;
-  top: -35px;
-  right: 0;
-  /* No fixed width: anchored right, the box shrink-to-fits and grows leftward
-     so the longest miles readouts never clip off-screen. */
-  max-width: calc(100vw - 24px);
-  text-align: right;
-  pointer-events: none;
-}
-
-.scale-readout strong {
-  display: block;
-  margin-top: 8px;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.12rem;
-  font-weight: 400;
-  white-space: nowrap;
-}
-
-/* Fixed-width row: the label pins left, the value pins right, and the gap
-   between them absorbs digit-width changes so nothing vibrates. */
-.scale-readout strong.scale-readout-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  width: 272px;
-  max-width: calc(100vw - 24px);
-}
-
-.scale-readout-line #scale-readout-value {
-  font-variant-numeric: tabular-nums;
 }
 
 .slider-assembly {
@@ -973,10 +942,6 @@ input:focus-visible {
     font-size: 0.56rem;
   }
 
-  .backend-pill {
-    display: none;
-  }
-
   .quiet-button {
     padding: 8px 11px;
     font-size: 0.68rem;
@@ -990,18 +955,6 @@ input:focus-visible {
   .scale-control {
     right: 12px;
     height: min(59vh, 510px);
-  }
-
-  .scale-readout {
-    right: 5px;
-  }
-
-  .scale-readout strong {
-    font-size: clamp(0.78rem, 4vw, 0.94rem);
-  }
-
-  .scale-readout strong.scale-readout-line {
-    width: 224px;
   }
 
   .slider-assembly {
@@ -1108,6 +1061,27 @@ input:focus-visible {
   font-size: 0.7rem;
   letter-spacing: 0.035em;
   pointer-events: auto;
+}
+
+/* Desktop (a real pointer): the rail thumb needs less finger room — ~3/4
+   the touch size — and the settings scroll column needs a gutter so the
+   browser's scrollbar doesn't butt against the toggle switches. */
+@media (pointer: fine) {
+  .vertical-slider::-webkit-slider-thumb {
+    width: 28px;
+    height: 28px;
+    margin-left: -13px;
+  }
+
+  .vertical-slider::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+  }
+
+  .settings-body {
+    padding-right: 18px;
+    scrollbar-gutter: stable;
+  }
 }
 
 .observer-label--button:hover,

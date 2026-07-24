@@ -39,11 +39,6 @@ export function IntroDialog({ open, onClose }: { open: boolean; onClose: () => v
       <aside className="intro-dialog" role="dialog" aria-modal="true" aria-label="Welcome">
         <span className="eyebrow">Welcome to</span>
         <h2>Plane of the Solar System</h2>
-        <p>
-          This is tonight's actual sky over where you stand. Pull away from the ground and let your
-          sense of up reset: the plane of the solar system holds flat while your ground tilts, and
-          it slowly sinks in that you have been standing on the side of a planet.
-        </p>
         <ul className="intro-list">
           <li>
             <strong>Drag</strong> to look around the sky.

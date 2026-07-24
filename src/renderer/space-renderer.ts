@@ -317,7 +317,6 @@ export class SpaceRenderer {
   private compassSmoothed: THREE.Quaternion | null = null;
   private moonGeoLocalM: Vec3d | null = null;
   private readoutElement: HTMLElement | null = null;
-  private readoutLabelElement: HTMLElement | null = null;
   private earthGuides: THREE.LineSegments | null = null;
   private axisStubs: THREE.LineSegments | null = null;
   private satellitePatches: SatellitePatches | null = null;
@@ -1219,14 +1218,10 @@ export class SpaceRenderer {
     // The big distance readout tracks the spring every frame (direct DOM —
     // React stays out of the frame loop; telemetry keeps the slow fallback).
     this.readoutElement ??= document.getElementById("scale-readout-value");
-    this.readoutLabelElement ??= document.getElementById("scale-readout-label");
-    if (this.readoutElement && this.readoutLabelElement) {
+    if (this.readoutElement) {
       const parts = formatDistanceParts(altitudeM);
       if (this.readoutElement.textContent !== parts.value) {
         this.readoutElement.textContent = parts.value;
-      }
-      if (this.readoutLabelElement.textContent !== parts.label) {
-        this.readoutLabelElement.textContent = parts.label;
       }
     }
 
