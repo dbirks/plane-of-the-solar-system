@@ -9,6 +9,7 @@ import {
   REVEAL_NORTH_LIFT,
   revealBlendForAltitude,
   systemCompositionForAltitude,
+  vantageSwingBlendForAltitude,
   wholeEarthFovDegForAspect,
 } from "../camera/camera-compositions";
 import { formatBodyRange, formatDistance } from "../camera/distance-format";
@@ -109,6 +110,25 @@ describe("whole-Earth composition", () => {
     let previous = 0;
     for (let exponent = 6.1; exponent <= 7.3; exponent += 0.05) {
       const value = revealBlendForAltitude(10 ** exponent);
+      expect(value).toBeGreaterThanOrEqual(previous);
+      previous = value;
+    }
+  });
+
+  it("holds a pure-zoom ball beat, then swings onto the plane by whole Earth", () => {
+    // Three-beat reveal: while revealBlend is already easing the frame's
+    // gates, the vantage itself stays glued to the zenith (the ground curls
+    // into a ball dead-center, dot facing the camera) until ~8,000 km; the
+    // 35° swing then completes exactly at whole Earth.
+    expect(vantageSwingBlendForAltitude(1_500_000)).toBe(0);
+    expect(revealBlendForAltitude(1_500_000)).toBeGreaterThan(0);
+    expect(vantageSwingBlendForAltitude(7_000_000)).toBe(0);
+    expect(vantageSwingBlendForAltitude(12_000_000)).toBeGreaterThan(0.2);
+    expect(vantageSwingBlendForAltitude(12_000_000)).toBeLessThan(0.9);
+    expect(vantageSwingBlendForAltitude(20_000_000)).toBe(1);
+    let previous = 0;
+    for (let exponent = 6.9; exponent <= 7.3; exponent += 0.02) {
+      const value = vantageSwingBlendForAltitude(10 ** exponent);
       expect(value).toBeGreaterThanOrEqual(previous);
       previous = value;
     }

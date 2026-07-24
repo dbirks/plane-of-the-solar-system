@@ -93,6 +93,21 @@ export function nadirBlendForAltitude(altitudeM: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/**
+ * The reveal's THIRD beat: the vantage swing off the zenith onto the plane
+ * framing. It starts well after revealBlendForAltitude does, so between the
+ * two the journey has a pure-zoom BALL beat — the camera keeps backing
+ * straight out along the observer's zenith, the ground curls into a complete
+ * ball dead-center with the glowing dot facing the camera ("you live on the
+ * side of it"), and only THEN does the frame swing and roll onto the plane.
+ * Same smootherstep, still settled exactly at whole Earth.
+ */
+export function vantageSwingBlendForAltitude(altitudeM: number): number {
+  const logAltitude = Math.log10(Math.max(1, altitudeM));
+  const t = Math.min(1, Math.max(0, (logAltitude - 6.9) / (7.3 - 6.9)));
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
 export function revealBlendForAltitude(altitudeM: number): number {
   // The realign is a LATE, slow beat: the map view stays glued straight
   // down over the observer's dot until ~1300 km out, then over more than a

@@ -2,7 +2,6 @@ import * as THREE from "three/webgpu";
 
 import {
   computeEarthOrbitEqjM,
-  computeEclipticRingEqjM,
   computePlanetOrbitEqjM,
   PLANET_IDS,
   type PlanetId,
@@ -21,8 +20,6 @@ const PLANET_COLORS: Record<PlanetId, number> = {
   neptune: 0x7ba7e8,
   pluto: 0xc4b09a,
 };
-
-const ECLIPTIC_RING_RADII_AU = [10, 20, 30, 40] as const;
 
 /** Expand a closed sample path into LineSegments pairs. */
 function closedPathToSegments(path: Float32Array): Float32Array {
@@ -107,16 +104,10 @@ export class SolarSystemLayer {
       this.helioGroup.add(mesh);
     }
 
-    for (const radiusAu of ECLIPTIC_RING_RADII_AU) {
-      const ring = buildLineSegments(
-        closedPathToSegments(computeEclipticRingEqjM(radiusAu)),
-        0x7fb4b8,
-        0.07,
-      );
-      ring.userData["kind"] = "ecliptic";
-      this.fadeLines.push(ring);
-      this.helioGroup.add(ring);
-    }
+    // No flat ecliptic-plane rings out here: their fixed radii (10/20/30/40
+    // AU) sat almost exactly under Saturn/Uranus/Neptune/Pluto and read as a
+    // gray "flattened double" of every outer orbit. The plane is told by the
+    // labeled band and the orbits themselves.
 
     this.group.visible = false;
   }
@@ -187,15 +178,14 @@ export class SolarSystemLayer {
     earthCenterRender: THREE.Vector3,
     renderUnitsPerMeter: number,
     reveal: number,
-    gates: { orbitLines: boolean; eclipticRings: boolean },
+    gates: { orbitLines: boolean },
   ): void {
     this.group.visible = reveal > 0.003;
     if (!this.group.visible) return;
     this.group.position.copy(earthCenterRender);
     this.group.scale.setScalar(renderUnitsPerMeter);
     for (const line of this.fadeLines) {
-      const enabled = line.userData["kind"] === "ecliptic" ? gates.eclipticRings : gates.orbitLines;
-      line.visible = enabled;
+      line.visible = gates.orbitLines;
       (line.material as THREE.LineBasicMaterial).opacity =
         reveal * (line.userData["baseOpacity"] as number);
     }

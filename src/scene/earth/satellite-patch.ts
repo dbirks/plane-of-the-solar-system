@@ -44,7 +44,19 @@ const PATCH_LEVELS = [
 /** GIBS Black Marble tops out at z8: the wide levels carry the night lights. */
 const NIGHT_MAX_ZOOM = 8;
 
-const METERS_PER_DEG_LAT = 110_574;
+/** Web-mercator sphere radius (the tile projection's own constant). */
+const MERCATOR_RADIUS_M = 6_378_137;
+
+const DEG = Math.PI / 180;
+
+/** Web-mercator meters — the linear space the tile PIXELS actually live in. */
+function mercatorXM(longitudeDeg: number): number {
+  return MERCATOR_RADIUS_M * longitudeDeg * DEG;
+}
+
+function mercatorYM(latitudeDeg: number): number {
+  return MERCATOR_RADIUS_M * Math.log(Math.tan(Math.PI / 4 + (latitudeDeg * DEG) / 2));
+}
 
 export function tileXY(latitudeDeg: number, longitudeDeg: number, zoom: number) {
   const n = 2 ** zoom;
@@ -142,13 +154,23 @@ export class SatellitePatches {
       const tileY0 = Math.floor(origin.y) - TILES_PER_SIDE / 2 + 1;
       const west = tileBounds(tileX0, tileY0, level.zoom);
       const east = tileBounds(tileX0 + TILES_PER_SIDE - 1, tileY0 + TILES_PER_SIDE - 1, level.zoom);
-      const metersPerDegLon = METERS_PER_DEG_LAT * Math.cos((observerLatitudeDeg * Math.PI) / 180);
-      const widthM = (east.eastDeg - west.westDeg) * metersPerDegLon;
-      const heightM = (west.northDeg - east.southDeg) * METERS_PER_DEG_LAT;
+      // Quad geometry in MERCATOR meters scaled to the ground at the
+      // observer's latitude. The canvas pixels are mercator-spaced; scaling
+      // by linear DEGREES instead (the old way) slid features by tens of km
+      // on the wide levels — the observer's city visibly jumped between
+      // zoom levels on the pull-out. Mercator is conformal, so one uniform
+      // cos(lat) puts every level in exact agreement around the observer.
+      const groundScale = Math.cos(observerLatitudeDeg * DEG);
+      const widthM = (mercatorXM(east.eastDeg) - mercatorXM(west.westDeg)) * groundScale;
+      const heightM = (mercatorYM(west.northDeg) - mercatorYM(east.southDeg)) * groundScale;
       const centerEastM =
-        ((west.westDeg + east.eastDeg) / 2 - observerLongitudeDeg) * metersPerDegLon;
+        ((mercatorXM(west.westDeg) + mercatorXM(east.eastDeg)) / 2 -
+          mercatorXM(observerLongitudeDeg)) *
+        groundScale;
       const centerNorthM =
-        ((west.northDeg + east.southDeg) / 2 - observerLatitudeDeg) * METERS_PER_DEG_LAT;
+        ((mercatorYM(west.northDeg) + mercatorYM(east.southDeg)) / 2 -
+          mercatorYM(observerLatitudeDeg)) *
+        groundScale;
 
       // City lights on the wide levels: an additive quad just above the day
       // imagery, so night streets glow instead of going flat gray.

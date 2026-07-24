@@ -28,6 +28,7 @@ import {
   REVEAL_NORTH_LIFT,
   revealBlendForAltitude,
   systemCompositionForAltitude,
+  vantageSwingBlendForAltitude,
   wholeEarthFovDegForAspect,
 } from "../camera/camera-compositions";
 import {
@@ -205,38 +206,47 @@ function createSceneObjects(
   const localCap = new THREE.Mesh(new THREE.CircleGeometry(1, 128), capMaterial);
   localCap.rotation.x = -Math.PI / 2;
 
-  // Maps-style blue: a deep-blue "you are here" dot inside a white ring
-  // (back-face shell, so the ring reads as an outline around the dot) —
-  // dark core + bright ring stays visible on light satellite imagery.
+  // Maps-style blue: a deep-blue "you are here" dot inside ONE soft
+  // light-blue glow (radial-gradient sprite, no hard shell edges) — the
+  // glow reads on bright imagery and dark night ground alike.
   const observerMarker = new THREE.Mesh(
     new THREE.SphereGeometry(1, 32, 16),
     new THREE.MeshBasicMaterial({ color: 0x1d5bd8, transparent: true, opacity: 0 }),
   );
-  const observerMarkerRim = new THREE.Mesh(
-    new THREE.SphereGeometry(1.6, 32, 16),
-    new THREE.MeshBasicMaterial({
-      color: 0xf4f8ff,
-      side: THREE.BackSide,
-      depthWrite: false,
+  const glowSize = 128;
+  const glowCanvas = document.createElement("canvas");
+  glowCanvas.width = glowSize;
+  glowCanvas.height = glowSize;
+  const glowContext = glowCanvas.getContext("2d");
+  if (glowContext) {
+    const gradient = glowContext.createRadialGradient(
+      glowSize / 2,
+      glowSize / 2,
+      0,
+      glowSize / 2,
+      glowSize / 2,
+      glowSize / 2,
+    );
+    gradient.addColorStop(0, "rgba(214, 232, 255, 0.95)");
+    gradient.addColorStop(0.3, "rgba(168, 202, 255, 0.55)");
+    gradient.addColorStop(0.65, "rgba(140, 180, 255, 0.16)");
+    gradient.addColorStop(1, "rgba(140, 180, 255, 0)");
+    glowContext.fillStyle = gradient;
+    glowContext.fillRect(0, 0, glowSize, glowSize);
+  }
+  const observerGlow = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(glowCanvas),
       transparent: true,
+      depthWrite: false,
+      depthTest: false,
       opacity: 0,
     }),
   );
-  observerMarker.add(observerMarkerRim);
-  // A soft outer halo makes the dot findable at a glance mid-pull-out,
-  // against bright imagery and dark night ground alike.
-  const observerMarkerHalo = new THREE.Mesh(
-    new THREE.SphereGeometry(2.6, 32, 16),
-    new THREE.MeshBasicMaterial({
-      color: 0x7fa8ff,
-      side: THREE.BackSide,
-      depthWrite: false,
-      transparent: true,
-      opacity: 0,
-    }),
-  );
-  observerMarkerHalo.name = "observer-halo";
-  observerMarker.add(observerMarkerHalo);
+  observerGlow.name = "observer-glow";
+  observerGlow.scale.setScalar(4.2);
+  observerGlow.renderOrder = 2.4;
+  observerMarker.add(observerGlow);
 
   const coordinateGrid = createCoordinateGrid();
   const continentOutlines = createContinentOutlines(observerLatitudeDeg, observerLongitudeDeg);
@@ -294,6 +304,10 @@ export class SpaceRenderer {
   private readonly sunDirectionUniform = uniform(new THREE.Vector3(0, 1, 0));
   private readonly surfaceFlattenUniform = uniform(1);
   private readonly eclipticNorthLocal = new THREE.Vector3(0, 1, 0);
+  /** Ecliptic-plane basis in the local frame (longitude 0° and 90°), for
+   * reading a gaze direction's ecliptic longitude back out. */
+  private readonly eclipticE1Local = new THREE.Vector3(1, 0, 0);
+  private readonly eclipticE2Local = new THREE.Vector3(0, 0, -1);
   private planeGuideAnchors: PlaneGuideAnchor[] = [];
   /** Unit direction from Earth's center to the camera, local frame. */
   private readonly cameraDirLocal = new THREE.Vector3(0, 1, 0);
@@ -662,6 +676,12 @@ export class SpaceRenderer {
     this.sunAltitudeDeg = sky.sun.altitudeDeg;
     const eclipticNorthLocal = rotateEqjToLocal(sky.eqjToLocalThree, eclipticNorthEqj() as Vec3d);
     this.eclipticNorthLocal.set(...eclipticNorthLocal);
+    this.eclipticE1Local.set(
+      ...rotateEqjToLocal(sky.eqjToLocalThree, eclipticDirectionEqj(0) as Vec3d),
+    );
+    this.eclipticE2Local.set(
+      ...rotateEqjToLocal(sky.eqjToLocalThree, eclipticDirectionEqj(90) as Vec3d),
+    );
     // Six "Plane of the solar system" captions spread around the ecliptic —
     // dense enough that the below-horizon stretch always carries one too; the
     // overlay projects them each frame and shows whichever face the view.
@@ -775,6 +795,11 @@ export class SpaceRenderer {
     // above the ecliptic, while the frame eases toward "plane flat across
     // the background, Earth off to the right with the observer's dot on it".
     const revealBlend = revealBlendForAltitude(altitudeM);
+    // The reveal now has a pure-zoom BALL beat: revealBlend drives the
+    // opacities/gates while the vantage swing itself waits — the camera
+    // backs straight out along the zenith until the ground is a complete
+    // ball dead-center (dot facing you), THEN swings onto the plane framing.
+    const vantageSwing = vantageSwingBlendForAltitude(altitudeM);
     // The physical heliocentric layer takes over from the sky proxies as the
     // journey approaches interplanetary scale (this also fades Earth's
     // screen offset back to center for the final frames).
@@ -794,7 +819,7 @@ export class SpaceRenderer {
         .addScaledVector(this.eclipticNorthLocal, REVEAL_NORTH_LIFT)
         .normalize();
       const fullArc = new THREE.Quaternion().setFromUnitVectors(this.cameraDirLocal, revealDir);
-      this.arcQuaternion.slerp(fullArc, revealBlend);
+      this.arcQuaternion.slerp(fullArc, vantageSwing);
       this.cameraDirLocal.applyQuaternion(this.arcQuaternion);
     }
 
@@ -805,9 +830,11 @@ export class SpaceRenderer {
     const orbitBlend = revealBlend;
     if (orbitBlend > 0.001 && (this.yawOffset !== 0 || this.pitchOffset !== 0)) {
       const gaze = this.cameraDirLocal.clone().multiplyScalar(-1);
-      const upAxis = new THREE.Vector3(0, 1 - revealBlend, 0).addScaledVector(
+      // Yaw orbits about the zenith through the ball beat (the globe spins
+      // under you), then about ecliptic north once the frame has rolled.
+      const upAxis = new THREE.Vector3(0, 1 - vantageSwing, 0).addScaledVector(
         this.eclipticNorthLocal,
-        revealBlend,
+        vantageSwing,
       );
       upAxis.addScaledVector(gaze, -upAxis.dot(gaze));
       if (upAxis.lengthSq() > 1e-8) {
@@ -894,8 +921,10 @@ export class SpaceRenderer {
     const markerDistanceRender = observerSurfaceRender.length();
     // Fixed floor capped ANGULARLY: at map altitudes an absolute floor made
     // the dot (and its dark rim) a huge disc over the imagery.
+    // Absolute cap 0.0035 (not 0.002): the old cap pinched the dot's
+    // apparent size through the ~10–20 mi band, where its outline vanished.
     const markerSize = Math.max(
-      Math.min(0.002, markerDistanceRender * 0.02),
+      Math.min(0.0035, markerDistanceRender * 0.02),
       markerDistanceRender * 0.009,
     );
     // Sit clearly ABOVE the imagery quads (they float up to ~10 m over the
@@ -910,7 +939,7 @@ export class SpaceRenderer {
       const markerMaterial = (mesh as THREE.Mesh).material as THREE.MeshBasicMaterial;
       markerMaterial.transparent = true;
       // The outer halo stays translucent — a glow, not a bigger dot.
-      markerMaterial.opacity = mesh.name === "observer-halo" ? 0.38 * markerReveal : markerReveal;
+      markerMaterial.opacity = mesh.name === "observer-glow" ? 0.9 * markerReveal : markerReveal;
     }
 
     const atmosphereExit = smoothstep(45_000, 450_000, altitudeM);
@@ -932,7 +961,6 @@ export class SpaceRenderer {
     }
     this.solarLayer?.updateFrame(earthCenterRender, renderUnitsPerMeter, systemReveal, {
       orbitLines: layers["orbit-lines"],
-      eclipticRings: layers["ecliptic-rings"],
     });
     // Satellite imagery is below its native resolution close up — hold the
     // stylized surface until the imagery patches have fully handed off
@@ -1071,10 +1099,17 @@ export class SpaceRenderer {
     // the horizon, so there is no mid-journey spin.
     if (revealBlend > 0.001) {
       const gazeTarget = this.cameraDirLocal.clone().multiplyScalar(-1);
+      // During the ball beat screen-up stays NORTH (the map frame simply
+      // recedes — pure zoom, no roll); the roll onto ecliptic north happens
+      // with the vantage swing, so the plane lies flat exactly as the frame
+      // banks around the planet.
+      const revealUp = new THREE.Vector3(0, 0, -1)
+        .lerp(this.eclipticNorthLocal, vantageSwing)
+        .normalize();
       const lookMatrix = new THREE.Matrix4().lookAt(
         new THREE.Vector3(0, 0, 0),
         gazeTarget,
-        this.eclipticNorthLocal,
+        revealUp,
       );
       const revealQuaternion = new THREE.Quaternion().setFromRotationMatrix(lookMatrix);
       baseQuaternion.slerp(revealQuaternion, revealBlend);
@@ -1252,6 +1287,58 @@ export class SpaceRenderer {
         physical: true,
         apparentRadiusDeg: apparentRadiusDeg(EARTH_MEAN_RADIUS_M, altitudeM + EARTH_MEAN_RADIUS_M),
       });
+    }
+    // Out in space the captions follow the FRAME, not fixed ecliptic
+    // longitudes: anchors flank the gaze's own ecliptic longitude so
+    // "Plane of the solar system" reads centered beside the globe as you
+    // pull out, wherever on Earth (and whenever) you started. The ground
+    // sky keeps the astronomy-tick anchors.
+    if (revealBlend > 0.01 && this.skyState) {
+      const gazeLongitudeDeg =
+        (Math.atan2(
+          -this.cameraDirLocal.dot(this.eclipticE2Local),
+          -this.cameraDirLocal.dot(this.eclipticE1Local),
+        ) *
+          180) /
+        Math.PI;
+      // Flank angle fitted to the moment: inside the camera's horizontal
+      // half-FOV (a portrait phone frames barely ±20°) but clear of the
+      // globe's caption occluder, so the words sit visible beside the ball
+      // and drift toward center as the planet shrinks.
+      const horizontalHalfFovDeg = THREE.MathUtils.radToDeg(
+        Math.atan(
+          Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) *
+            Math.max(0.3, this.camera.aspect),
+        ),
+      );
+      // The band rides ~8.5° above the gaze (REVEAL_NORTH_LIFT), so the
+      // horizontal clearance past the occluder is smaller than the full
+      // angular clearance — captions tuck in closer to center.
+      const occluderRadiusDeg =
+        (Math.asin(EARTH_MEAN_RADIUS_M / (EARTH_MEAN_RADIUS_M + altitudeM)) * 180) / Math.PI;
+      const clearanceDeg = Math.sqrt(Math.max(0, (occluderRadiusDeg + 7) ** 2 - 8.5 ** 2));
+      // Resting flank ≥ 14°: the two flanking captions are each ~17° of
+      // text on a phone — any closer to center and they run together. The
+      // occluder clearance always wins so the words never sit on the globe.
+      const restingFlankDeg = Math.max(14, Math.min(26, horizontalHalfFovDeg * 0.5));
+      const flankDeg = Math.max(clearanceDeg, restingFlankDeg);
+      this.planeGuideAnchors = [
+        flankDeg,
+        -flankDeg,
+        flankDeg + 60,
+        -(flankDeg + 60),
+        flankDeg + 120,
+        -(flankDeg + 120),
+      ].map((offsetDeg) => ({
+        direction: rotateEqjToLocal(
+          this.skyState!.eqjToLocalThree,
+          eclipticDirectionEqj(gazeLongitudeDeg + offsetDeg) as Vec3d,
+        ),
+        directionAhead: rotateEqjToLocal(
+          this.skyState!.eqjToLocalThree,
+          eclipticDirectionEqj(gazeLongitudeDeg + offsetDeg + 8) as Vec3d,
+        ),
+      }));
     }
     // In space the band passes behind the globe; captions on the Earth's
     // apparent disc hide with it instead of floating over the planet.
